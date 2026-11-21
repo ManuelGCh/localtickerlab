@@ -67,10 +67,9 @@
     noEarnings: false,
     enrichRunning: false,
     regime: {},
-    hiddenCols: store.get("sl.hiddenCols", [
-      "pct_score", "rs_qqq_3m", "revenue_growth", "eps_surprise",
-      "days_to_earnings", "trend", "momentum", "rsi",
-      "ret_3m", "ret_1y", "vol_60d", "max_drawdown",
+    hiddenCols: store.get("sl.hiddenCols.v2", [
+      "revenue_growth", "eps_surprise", "trend", "momentum",
+      "vol_60d", "max_drawdown",
     ]),
     views: store.get("sl.views", []),
     capital: store.get("sl.capital", 10000),
@@ -404,7 +403,7 @@
     $("#noEarnings").checked = !!config.noEarnings;
     state.noEarnings = !!config.noEarnings;
     state.hiddenCols = config.hiddenCols || [];
-    store.set("sl.hiddenCols", state.hiddenCols);
+    store.set("sl.hiddenCols.v2", state.hiddenCols);
     buildColumnPanel();
     applyColumns();
     updateScanNote();
@@ -422,7 +421,7 @@
   function buildColumnPanel() {
     const panel = $("#columnsPanel");
     if (!panel) return;
-    store.set("sl.hiddenCols", state.hiddenCols);
+    store.set("sl.hiddenCols.v2", state.hiddenCols);
     panel.innerHTML =
       Object.entries(OPTIONAL_COLUMNS)
         .map(
@@ -440,13 +439,13 @@
         } else if (!state.hiddenCols.includes(key)) {
           state.hiddenCols.push(key);
         }
-        store.set("sl.hiddenCols", state.hiddenCols);
+        store.set("sl.hiddenCols.v2", state.hiddenCols);
         applyColumns();
       });
     });
     panel.querySelector("#resetColumns").addEventListener("click", () => {
       state.hiddenCols = ["trend", "momentum", "vol_60d", "max_drawdown"];
-      store.set("sl.hiddenCols", state.hiddenCols);
+      store.set("sl.hiddenCols.v2", state.hiddenCols);
       buildColumnPanel();
       applyColumns();
     });
@@ -569,13 +568,6 @@
       }, 220);
     });
     $("#screenCards").addEventListener("click", (ev) => {
-      const star = ev.target.closest("[data-card-star]");
-      if (star) {
-        ev.stopPropagation();
-        toggleWatch(star.dataset.cardStar);
-        renderScreenTable();
-        return;
-      }
       const card = ev.target.closest("[data-card-symbol]");
       if (card) openSymbol(card.dataset.cardSymbol);
     });
@@ -883,7 +875,7 @@
           </div>
           <div class="stock-card-foot">
             <span class="muted small">Toca para analizar</span>
-            <button class="icon-btn ${state.watchlist.includes(row.symbol) ? "starred" : ""}" data-card-star="${row.symbol}">${state.watchlist.includes(row.symbol) ? "★" : "☆"}</button>
+            <span class="muted small">${Math.round(row.score)}/100</span>
           </div>
         </div>`;
       })
@@ -1150,7 +1142,6 @@
     body.innerHTML = rows
       .map((r, i) => {
         const sub = r.subscores || {};
-        const starred = state.watchlist.includes(r.symbol);
         const chgClass = (r.change_pct || 0) >= 0 ? "pos" : "neg";
         return `<tr data-symbol="${r.symbol}">
           <td class="col-rank"><span class="rank-badge ${i < 3 ? "top" : ""}">${i + 1}</span></td>
@@ -1163,8 +1154,6 @@
           <td class="num">${fmt.price(r.price)}</td>
           <td class="num ${chgClass}">${fmt.pct(r.change_pct)}</td>
           <td class="num">${actionBadge(r.action)}</td>
-          <td class="num" data-col="pct_score">${r.pct_score != null ? Math.round(r.pct_score) : "—"}</td>
-          <td class="num" data-col="rs_qqq_3m"><span class="${(r.rs_qqq_3m || 0) >= 0 ? "pos" : "neg"}">${fmt.pct(r.rs_qqq_3m, 1)}</span></td>
           <td class="num">
             <span class="score-pill" style="color:${scoreColor(r.score)};border-color:${scoreColor(r.score)}44;background:${scoreColor(r.score)}18">${Math.round(r.score)}</span>
             <span class="score-bar"><i style="width:${r.score}%;background:${scoreColor(r.score)}"></i></span>
@@ -1172,13 +1161,14 @@
           <td class="num">${qualityCell(r)}</td>
           <td class="num" data-col="revenue_growth">${pctCell(r, r.revenue_growth)}</td>
           <td class="num" data-col="eps_surprise">${pctCell(r, r.eps_surprise)}</td>
-          <td class="num" data-col="days_to_earnings">${daysCell(r)}</td>
           <td class="num">
             <div class="target-cell">
               <span>$${fmt.price(r.target_3m)}</span>
               <span class="${(r.upside_3m || 0) >= 0 ? "pos" : "neg"}">${fmt.pct(r.upside_3m, 1)}</span>
             </div>
           </td>
+          <td class="num" data-col="pct_score">${r.pct_score != null ? Math.round(r.pct_score) : "—"}</td>
+          <td class="num" data-col="rs_qqq_3m"><span class="${(r.rs_qqq_3m || 0) >= 0 ? "pos" : "neg"}">${fmt.pct(r.rs_qqq_3m, 1)}</span></td>
           <td class="num" data-col="trend">${sub.trend != null ? Math.round(sub.trend) : "—"}</td>
           <td class="num" data-col="momentum">${sub.momentum != null ? Math.round(sub.momentum) : "—"}</td>
           <td class="num" data-col="rsi">${r.rsi != null ? r.rsi.toFixed(0) : "—"}</td>
@@ -1186,9 +1176,7 @@
           <td class="num" data-col="ret_1y"><span class="${(r.ret_1y || 0) >= 0 ? "pos" : "neg"}">${fmt.pct(r.ret_1y, 0)}</span></td>
           <td class="num" data-col="vol_60d">${fmt.pctRaw(r.vol_60d == null ? null : r.vol_60d * 100, 0)}</td>
           <td class="num neg" data-col="max_drawdown">${fmt.pctRaw(r.max_drawdown == null ? null : -r.max_drawdown * 100, 0)}</td>
-          <td class="col-actions">
-            <button class="icon-btn ${starred ? "starred" : ""}" data-action="star" data-symbol="${r.symbol}" title="Watchlist">${starred ? "★" : "☆"}</button>
-          </td>
+          <td class="num" data-col="days_to_earnings">${daysCell(r)}</td>
         </tr>`;
       })
       .join("");
