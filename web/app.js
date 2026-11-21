@@ -67,9 +67,9 @@
     noEarnings: false,
     enrichRunning: false,
     regime: {},
-    hiddenCols: store.get("sl.hiddenCols.v2", [
-      "revenue_growth", "eps_surprise", "trend", "momentum",
-      "vol_60d", "max_drawdown",
+    hiddenCols: store.get("sl.hiddenCols.v3", [
+      "revenue_growth", "eps_surprise", "days_to_earnings", "trend",
+      "momentum", "vol_60d", "max_drawdown",
     ]),
     views: store.get("sl.views", []),
     capital: store.get("sl.capital", 10000),
@@ -403,7 +403,7 @@
     $("#noEarnings").checked = !!config.noEarnings;
     state.noEarnings = !!config.noEarnings;
     state.hiddenCols = config.hiddenCols || [];
-    store.set("sl.hiddenCols.v2", state.hiddenCols);
+    store.set("sl.hiddenCols.v3", state.hiddenCols);
     buildColumnPanel();
     applyColumns();
     updateScanNote();
@@ -421,7 +421,7 @@
   function buildColumnPanel() {
     const panel = $("#columnsPanel");
     if (!panel) return;
-    store.set("sl.hiddenCols.v2", state.hiddenCols);
+    store.set("sl.hiddenCols.v3", state.hiddenCols);
     panel.innerHTML =
       Object.entries(OPTIONAL_COLUMNS)
         .map(
@@ -439,13 +439,13 @@
         } else if (!state.hiddenCols.includes(key)) {
           state.hiddenCols.push(key);
         }
-        store.set("sl.hiddenCols.v2", state.hiddenCols);
+        store.set("sl.hiddenCols.v3", state.hiddenCols);
         applyColumns();
       });
     });
     panel.querySelector("#resetColumns").addEventListener("click", () => {
       state.hiddenCols = ["trend", "momentum", "vol_60d", "max_drawdown"];
-      store.set("sl.hiddenCols.v2", state.hiddenCols);
+      store.set("sl.hiddenCols.v3", state.hiddenCols);
       buildColumnPanel();
       applyColumns();
     });
