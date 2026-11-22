@@ -1095,16 +1095,21 @@
       }
     });
 
+    const asOf = rows.reduce(
+      (latest, row) => (row.as_of && row.as_of > latest ? row.as_of : latest),
+      ""
+    );
+    const asOfText = asOf ? ` · cierre ${fmt.date(asOf)}` : "";
     if (state.searching) {
       $("#resultsCount").textContent = "buscando en todo el universo…";
     } else if (state.search && state.searchTotal > rows.length) {
-      $("#resultsCount").textContent = `Top ${nf0.format(rows.length)} de ${nf0.format(state.searchTotal)} coincidencias`;
+      $("#resultsCount").textContent = `Top ${nf0.format(rows.length)} de ${nf0.format(state.searchTotal)} coincidencias${asOfText}`;
     } else if (!rows.length) {
       $("#resultsCount").textContent = "";
     } else if (!state.loadedAll && state.screenTotal > state.rows.length && !state.search) {
-      $("#resultsCount").textContent = `Top ${nf0.format(state.rows.length)} de ${nf0.format(state.screenTotal)}`;
+      $("#resultsCount").textContent = `Top ${nf0.format(state.rows.length)} de ${nf0.format(state.screenTotal)}${asOfText}`;
     } else {
-      $("#resultsCount").textContent = `${nf0.format(rows.length)} valores`;
+      $("#resultsCount").textContent = `${nf0.format(rows.length)} valores${asOfText}`;
     }
     $("#loadAll").classList.toggle(
       "hidden",

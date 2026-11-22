@@ -185,12 +185,12 @@ class Api:
             return {"rows": [], "total": 0, "q": ""}
         job = self.screener.get(job_id)
         if job:
-            rows = job.rows
+            rows = job.rows if job.status == "running" else self.screener.refresh(job.rows)
         else:
             run = store.get_screen_run(job_id)
             if not run:
                 raise ApiError("trabajo no encontrado", 404)
-            rows = run["rows"]
+            rows = self.screener.refresh(run["rows"])
         needle = query.lower()
         upper = query.upper()
 
@@ -224,11 +224,12 @@ class Api:
         job_id = (params.get("id", [""])[0] or "").strip()
         job = self.screener.get(job_id)
         if job:
-            return {"id": job.id, "rows": job.rows}
+            rows = job.rows if job.status == "running" else self.screener.refresh(job.rows)
+            return {"id": job.id, "rows": rows}
         run = store.get_screen_run(job_id)
         if not run:
             raise ApiError("trabajo no encontrado", 404)
-        return {"id": run["id"], "rows": run["rows"]}
+        return {"id": run["id"], "rows": self.screener.refresh(run["rows"])}
 
     def screen_status(self, params: dict[str, list[str]]) -> dict[str, Any]:
         job_id = (params.get("id", [""])[0] or "").strip()
@@ -252,18 +253,14 @@ class Api:
         if job_id:
             job = self.screener.get(job_id)
             if job:
-                rows = job.rows
+                rows = job.rows if job.status == "running" else self.screener.refresh(job.rows)
             else:
                 run = store.get_screen_run(job_id)
-                rows = run["rows"] if run else []
+                rows = self.screener.refresh(run["rows"]) if run else []
         else:
             universe = (params.get("universe", ["ndx"])[0] or "ndx").lower()
             latest = self.screener.latest(universe)
-            if latest:
-                run = store.get_screen_run(latest["id"])
-                rows = run["rows"] if run else latest.get("rows", [])
-            else:
-                rows = []
+            rows = latest.get("rows", []) if latest else []
 
         if not rows:
             raise ApiError("no hay resultados para exportar", 404)

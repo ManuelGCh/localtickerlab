@@ -521,6 +521,30 @@ def get_cached_score(symbol: str) -> dict[str, Any] | None:
     return {"as_of": row["as_of"], "row": payload, "age_hours": age}
 
 
+def get_cached_scores(symbols: list[str]) -> dict[str, dict[str, Any]]:
+    """Devuelve la última fila cacheada por símbolo (consulta por lotes)."""
+    unique = [s.upper() for s in dict.fromkeys(symbols) if s]
+    if not unique:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    with _connect() as conn:
+        for start in range(0, len(unique), 400):
+            chunk = unique[start : start + 400]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = conn.execute(
+                f"SELECT symbol, as_of, payload FROM score_cache WHERE symbol IN ({placeholders})",
+                chunk,
+            ).fetchall()
+            for row in rows:
+                try:
+                    payload = json.loads(row["payload"])
+                except json.JSONDecodeError:
+                    continue
+                payload.setdefault("as_of", row["as_of"])
+                out[row["symbol"].upper()] = payload
+    return out
+
+
 def save_cached_score(symbol: str, as_of: str, row: dict[str, Any]) -> None:
     with _write_lock, _connect() as conn:
         conn.execute(

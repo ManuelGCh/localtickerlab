@@ -554,16 +554,40 @@ class ScreenerService:
             if run.get("status") in ("done", "cancelled") and run["universe"] not in self._latest:
                 self._latest[run["universe"]] = run["id"]
 
+    def refresh(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Superpone la última caché por símbolo a una foto de escaneo antigua."""
+        if not rows:
+            return rows
+        cached = store.get_cached_scores([row.get("symbol") or "" for row in rows])
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            fresh = cached.get((row.get("symbol") or "").upper())
+            current_as_of = row.get("as_of") or ""
+            fresh_as_of = (fresh or {}).get("as_of") or ""
+            if fresh and fresh_as_of >= current_as_of:
+                merged = dict(row)
+                merged.update(fresh)
+                merged["symbol"] = row.get("symbol") or fresh.get("symbol")
+                out.append(merged)
+            else:
+                out.append(row)
+        return out
+
     def latest(self, universe: str) -> dict[str, Any] | None:
         run_id = self._latest.get(universe)
         if not run_id:
             return None
         job = self.jobs.get(run_id)
         if job:
-            return job.snapshot()
+            snapshot = job.snapshot()
+            if job.status != "running":
+                snapshot["rows"] = self.refresh(snapshot["rows"])
+                snapshot["action_counts"] = action_counts(snapshot["rows"])
+            return snapshot
         run = self._restored.get(run_id)
         if not run:
             return None
+        rows = self.refresh(run["rows"][:500])
         return {
             "id": run["id"],
             "universe": run["universe"],
@@ -574,8 +598,8 @@ class ScreenerService:
             "errors": run["errors"],
             "created_at": run["created_at"],
             "finished_at": run["finished_at"],
-            "rows": run["rows"][:500],
-            "action_counts": action_counts(run["rows"]),
+            "rows": rows,
+            "action_counts": action_counts(rows),
             "regime": run.get("regime") or {},
             "elapsed": 0,
             "eta": 0,
@@ -645,7 +669,7 @@ class ScreenerService:
         job.total = run.get("total") or len(run.get("rows") or [])
         job.done = run.get("done") or len(run.get("rows") or [])
         job.errors = run.get("errors") or 0
-        job.rows = list(run.get("rows") or [])
+        job.rows = self.refresh(list(run.get("rows") or []))
         job.created_at = run.get("created_at") or job.created_at
         job.finished_at = run.get("finished_at")
         job.enrich_status = "idle"
