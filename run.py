@@ -30,7 +30,7 @@ from stocklab.backtest import BacktestData, BacktestService
 from stocklab.fundamentals import FundamentalsService
 from stocklab.news import NewsService
 from stocklab import portfolio
-from stocklab.screener import DataService, ScreenerService, UniverseService
+from stocklab.screener import DataService, ScanBusy, ScreenerService, UniverseService
 from stocklab.server import create_server, find_port
 
 
@@ -122,7 +122,12 @@ def run_scan_once(args, screener, fundamentals, data) -> int:
         started_at=store.now_ny().isoformat(timespec="seconds"),
     )
     print(f"Escaneando {label}…")
-    job = screener.start(args.universe, params)
+    try:
+        job = screener.start(args.universe, params)
+    except ScanBusy as exc:
+        scanstatus.finish(phase="skipped", message=str(exc))
+        print(f"Escaneo omitido: {exc}")
+        return 0
     scanstatus.write(phase="precios", total=job.total, done=0, errors=0, message="Descargando precios")
     while job.status == "running":
         time.sleep(3)

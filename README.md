@@ -189,6 +189,7 @@ frío tarda ~1-3 s por valor; con la caché caliente, segundos.
 La pestaña **Backtest** responde a la pregunta que ningún indicador responde solo:
 *¿la señal sirve para algo?*
 
+- Se puede **cancelar** un backtest en curso desde el panel de progreso.
 - Elige universo (top 150-1.000 por liquidez), horizonte (5/21/63 sesiones),
   rebalanceo, periodo (3-8 años) y costes.
 - En cada fecha de rebalanceo se calcula la señal con datos hasta ese cierre y se mide
@@ -248,7 +249,9 @@ El dashboard es **bajo demanda**: ábrelo cuando quieras verlo y ciérralo despu
 python3 run.py          # o doble clic en StockLab.command
 ```
 
-Los datos, la cartera y las alertas quedan en SQLite; no se pierde nada al cerrar.
+Los datos, la cartera, las alertas, la watchlist y las vistas guardadas quedan en SQLite;
+no se pierde nada al cerrar ni al limpiar el navegador. El agente diario y el dashboard
+comparten un bloqueo: nunca lanzan dos escaneos a la vez.
 El chip superior muestra la última actualización y se pone ámbar si tiene más de dos días.
 
 Para mantener los datos al día **sin tener el servidor abierto**, instala una vez el
@@ -347,6 +350,8 @@ tests/                    pruebas con unittest
 | `GET /api/news?symbol=` | Titulares, eventos y sentimiento |
 | `GET /api/alerts` · `/api/alerts/add` · `/api/alerts/check` | Alertas y eventos |
 | `GET /api/portfolio` · `/api/portfolio/add` | Cartera y P&L |
+| `GET /api/watchlist` · `/api/watchlist/add` · `/api/watchlist/remove` | Watchlist persistente |
+| `GET /api/views` · `/api/views/save` · `/api/views/delete` | Vistas guardadas |
 | `GET /api/screen/start?universe=ndx&...` | Lanza (o reutiliza) un screener |
 | `GET /api/screen/status?id=` | Progreso y filas parciales |
 | `GET /api/screen/latest?universe=` | Último resultado guardado |
@@ -356,6 +361,7 @@ tests/                    pruebas con unittest
 | `GET /api/backtest/start?symbols=300&horizon=21&...` | Lanza un backtest |
 | `GET /api/backtest/status?id=` | Progreso y resultado |
 | `GET /api/backtest/latest` | Último resultado guardado |
+| `GET /api/backtest/cancel?id=` | Cancela un backtest en curso |
 | `GET /api/backtest/calibrate?id=` | Diagnóstico de factores y pesos |
 | `GET /api/system` | Estado del escaneo diario, fallidos y base de datos |
 | `GET /api/backup` | Descarga una copia completa de SQLite |

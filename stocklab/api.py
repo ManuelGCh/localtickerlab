@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from . import analysis, backtest, config, fundamentals, net, news, portfolio, scanstatus, store
-from .screener import DataService, ScreenerService, UniverseService, benchmark_bars
+from .screener import DataService, ScanBusy, ScreenerService, UniverseService, benchmark_bars
 
 SYMBOL_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,9}$")
 VERSION = "1.0.0"
@@ -173,6 +173,8 @@ class Api:
 
         try:
             job = self.screener.start(universe, filters, symbols=symbols, force=force)
+        except ScanBusy as exc:
+            raise ApiError(str(exc), 409) from exc
         except net.FetchError as exc:
             raise ApiError(f"no se pudo cargar el universo: {exc}", 503) from exc
         return job.snapshot()
@@ -418,7 +420,7 @@ class Api:
     def user_import(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise ApiError("formato de importación no válido")
-        clean = {"positions": [], "alerts": []}
+        clean = {"positions": [], "alerts": [], "watchlist": [], "views": []}
         for item in payload.get("positions") or []:
             if not isinstance(item, dict):
                 continue
@@ -444,12 +446,77 @@ class Api:
                 if not math.isfinite(threshold) or threshold <= 0:
                     continue
             clean["alerts"].append({**item, "symbol": symbol})
+        for symbol in payload.get("watchlist") or []:
+            value = str(symbol or "").strip().upper()
+            if SYMBOL_RE.match(value):
+                clean["watchlist"].append(value)
+        for item in payload.get("views") or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            config = item.get("config")
+            if name and len(name) <= 80 and isinstance(config, dict):
+                clean["views"].append({"name": name, "config": config})
         return {"ok": True, **store.import_user_data(clean)}
 
     def backup(self, params: dict[str, list[str]]) -> RawResponse:
         body = store.backup_bytes()
         filename = f"stocklab_backup_{store.now_ny().date().isoformat()}.db"
         return RawResponse(body, "application/octet-stream", filename)
+
+    def watchlist_get(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        return {"symbols": store.list_watchlist()}
+
+    def watchlist_add(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        symbol = (params.get("symbol", [""])[0] or "").strip().upper()
+        if not SYMBOL_RE.match(symbol):
+            raise ApiError("símbolo no válido")
+        store.add_watch(symbol)
+        return {"symbols": store.list_watchlist()}
+
+    def watchlist_remove(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        symbol = (params.get("symbol", [""])[0] or "").strip().upper()
+        if symbol:
+            store.remove_watch(symbol)
+        return {"symbols": store.list_watchlist()}
+
+    def watchlist_replace(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        symbols = [
+            symbol
+            for symbol in _list(params, "symbols")
+            if SYMBOL_RE.match(symbol.upper())
+        ]
+        store.replace_watchlist(symbols)
+        return {"symbols": store.list_watchlist()}
+
+    def watchlist_clear(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        store.clear_watchlist()
+        return {"symbols": []}
+
+    def views_list(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        return {"views": store.list_views()}
+
+    def views_save(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        name = (params.get("name", [""])[0] or "").strip()
+        raw = params.get("config", [""])[0] or ""
+        if not name or len(name) > 80:
+            raise ApiError("nombre de vista no válido")
+        if len(raw) > 20_000:
+            raise ApiError("vista demasiado grande")
+        try:
+            config = json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ApiError("configuración de vista no válida") from exc
+        if not isinstance(config, dict):
+            raise ApiError("configuración de vista no válida")
+        store.save_view(name, config)
+        return {"views": store.list_views()}
+
+    def views_delete(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        name = (params.get("name", [""])[0] or "").strip()
+        if name:
+            store.delete_view(name)
+        return {"views": store.list_views()}
 
     def alerts_list(self, params: dict[str, list[str]]) -> dict[str, Any]:
         events = store.list_alert_events(50)
@@ -590,6 +657,15 @@ class Api:
         if not job:
             raise ApiError("trabajo no encontrado", 404)
         return job.snapshot()
+
+    def backtest_cancel(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        if not self.backtests:
+            raise ApiError("backtesting no disponible", 503)
+        job_id = (params.get("id", [""])[0] or "").strip()
+        job = self.backtests.cancel(job_id)
+        if not job:
+            raise ApiError("trabajo no encontrado", 404)
+        return job
 
     def backtest_latest(self, params: dict[str, list[str]]) -> dict[str, Any]:
         if not self.backtests:

@@ -129,6 +129,18 @@ CREATE TABLE IF NOT EXISTS screen_runs (
     payload     TEXT,
     regime      TEXT
 );
+
+CREATE TABLE IF NOT EXISTS watchlist (
+    symbol     TEXT PRIMARY KEY,
+    created_at TEXT
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS saved_views (
+    name       TEXT PRIMARY KEY,
+    config     TEXT NOT NULL,
+    created_at TEXT,
+    updated_at TEXT
+) WITHOUT ROWID;
 """
 
 
@@ -451,6 +463,42 @@ def save_screen_run(run: dict[str, Any]) -> None:
                 f"DELETE FROM screen_runs WHERE id NOT IN ({placeholders})",
                 tuple(keep),
             )
+
+
+def acquire_scan_lock() -> Any | None:
+    """Bloqueo global de escaneos entre procesos (servidor y launchd)."""
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - la app es macOS
+        return True
+    path = config.DB_PATH.parent / "scan.lock"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(path, "a+")
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return handle
+    except OSError:
+        try:
+            handle.close()
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+
+def release_scan_lock(handle: Any | None) -> None:
+    if handle is None or handle is True:
+        return
+    try:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        try:
+            handle.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def mark_screen_run_interrupted(run_id: str, finished_at: str) -> None:
@@ -846,18 +894,96 @@ def clear_alert_events() -> None:
         conn.execute("DELETE FROM alert_events")
 
 
+def list_watchlist() -> list[str]:
+    with _connect() as conn:
+        return [row["symbol"] for row in conn.execute(
+            "SELECT symbol FROM watchlist ORDER BY symbol"
+        )]
+
+
+def add_watch(symbol: str) -> None:
+    symbol = symbol.strip().upper()
+    if not symbol:
+        return
+    with _write_lock, _connect() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO watchlist(symbol, created_at) VALUES(?,?)",
+            (symbol, now_ny().isoformat(timespec="seconds")),
+        )
+
+
+def remove_watch(symbol: str) -> None:
+    with _write_lock, _connect() as conn:
+        conn.execute("DELETE FROM watchlist WHERE symbol = ?", (symbol.strip().upper(),))
+
+
+def replace_watchlist(symbols: Iterable[str]) -> None:
+    clean = sorted({str(s).strip().upper() for s in symbols if str(s).strip()})
+    stamp = now_ny().isoformat(timespec="seconds")
+    with _write_lock, _connect() as conn:
+        conn.execute("DELETE FROM watchlist")
+        conn.executemany(
+            "INSERT OR IGNORE INTO watchlist(symbol, created_at) VALUES(?,?)",
+            [(symbol, stamp) for symbol in clean],
+        )
+
+
+def clear_watchlist() -> None:
+    with _write_lock, _connect() as conn:
+        conn.execute("DELETE FROM watchlist")
+
+
+def list_views() -> list[dict[str, Any]]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT name, config FROM saved_views ORDER BY updated_at DESC, name"
+        ).fetchall()
+    views = []
+    for row in rows:
+        try:
+            config = json.loads(row["config"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(config, dict):
+            views.append({"name": row["name"], "config": config})
+    return views
+
+
+def save_view(name: str, config: dict[str, Any]) -> None:
+    name = name.strip()
+    if not name:
+        return
+    stamp = now_ny().isoformat(timespec="seconds")
+    with _write_lock, _connect() as conn:
+        conn.execute(
+            "INSERT INTO saved_views(name, config, created_at, updated_at) VALUES(?,?,?,?) "
+            "ON CONFLICT(name) DO UPDATE SET config=excluded.config, "
+            "updated_at=excluded.updated_at",
+            (name, json.dumps(config, ensure_ascii=False), stamp, stamp),
+        )
+
+
+def delete_view(name: str) -> None:
+    with _write_lock, _connect() as conn:
+        conn.execute("DELETE FROM saved_views WHERE name = ?", (name.strip(),))
+
+
 def export_user_data() -> dict[str, Any]:
     return {
         "version": 1,
         "exported_at": now_ny().isoformat(timespec="seconds"),
         "positions": list_positions(),
         "alerts": list_alerts(),
+        "watchlist": list_watchlist(),
+        "views": list_views(),
     }
 
 
 def import_user_data(payload: dict[str, Any]) -> dict[str, int]:
     added_positions = 0
     added_alerts = 0
+    added_watchlist = 0
+    added_views = 0
     for item in payload.get("positions") or []:
         try:
             symbol = str(item.get("symbol") or "").strip().upper()
@@ -889,6 +1015,22 @@ def import_user_data(payload: dict[str, Any]) -> dict[str, int]:
             added_positions += 1
         except (TypeError, ValueError):
             continue
+    for symbol in payload.get("watchlist") or []:
+        try:
+            value = str(symbol or "").strip().upper()
+        except Exception:  # noqa: BLE001
+            continue
+        if value:
+            add_watch(value)
+            added_watchlist += 1
+    for item in payload.get("views") or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        config = item.get("config")
+        if name and isinstance(config, dict):
+            save_view(name, config)
+            added_views += 1
     for item in payload.get("alerts") or []:
         try:
             symbol = str(item.get("symbol") or "").strip().upper()
@@ -905,7 +1047,12 @@ def import_user_data(payload: dict[str, Any]) -> dict[str, int]:
             added_alerts += 1
         except (TypeError, ValueError):
             continue
-    return {"positions": added_positions, "alerts": added_alerts}
+    return {
+        "positions": added_positions,
+        "alerts": added_alerts,
+        "watchlist": added_watchlist,
+        "views": added_views,
+    }
 
 
 def stats() -> dict[str, Any]:

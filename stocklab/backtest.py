@@ -828,11 +828,16 @@ def calibrate(
     }
 
 
+class BacktestCancelled(Exception):
+    pass
+
+
 class BacktestJob:
     def __init__(self, cfg: BacktestConfig) -> None:
         self.id = uuid.uuid4().hex[:12]
         self.cfg = cfg
         self.status = "running"
+        self.cancelled = False
         self.stage = "preparando datos"
         self.progress = 0
         self.error: str | None = None
@@ -853,7 +858,12 @@ class BacktestJob:
             "created_at": self.created_at,
             "finished_at": self.finished_at,
             "result": self.result,
+            "cancelling": self.cancelled and self.status == "running",
         }
+
+    def cancel(self) -> None:
+        if self.status == "running":
+            self.cancelled = True
 
     def run(self, symbols: list[str], data: BacktestData) -> None:
         started = time.monotonic()
@@ -864,6 +874,8 @@ class BacktestJob:
                 symbols,
                 progress=lambda done, count: self._fetch_progress(done, count, total),
             )
+            if self.cancelled:
+                raise BacktestCancelled()
             self.progress = 40
             self.stage = "cargando precios"
             qqq = data.get_bars("QQQ")
@@ -888,6 +900,8 @@ class BacktestJob:
                 sec_service = sec.SecService()
                 self.stage = "descargando datos SEC"
                 for index, symbol in enumerate(symbols):
+                    if self.cancelled:
+                        raise BacktestCancelled()
                     try:
                         quality_series[symbol] = sec_service.quarterly(symbol)
                     except Exception:  # noqa: BLE001
@@ -901,6 +915,8 @@ class BacktestJob:
             observations: list[dict[str, Any]] = []
             done = 0
             for symbol in symbols:
+                if self.cancelled:
+                    raise BacktestCancelled()
                 bars = data.get_bars(symbol)
                 if len(bars) >= 280:
                     observations.extend(
@@ -919,6 +935,8 @@ class BacktestJob:
                     self.progress = 55 + int(40 * done / max(1, len(symbols)))
                     self.stage = f"calculando señales ({done}/{len(symbols)})"
 
+            if self.cancelled:
+                raise BacktestCancelled()
             self.stage = "agregando resultados"
             self.observations = observations
             self.result = _aggregate(
@@ -929,10 +947,15 @@ class BacktestJob:
                 rebalance_idx,
                 time.monotonic() - started,
             )
+            if self.cancelled:
+                raise BacktestCancelled()
             self.result["run_id"] = self.id
             self.progress = 100
             self.status = "done"
             BT_RESULT.write_text(json.dumps(self.result, ensure_ascii=False))
+        except BacktestCancelled:
+            self.status = "cancelled"
+            self.error = None
         except Exception as exc:  # noqa: BLE001
             self.status = "error"
             self.error = str(exc)
@@ -940,6 +963,8 @@ class BacktestJob:
             self.finished_at = store.now_ny().isoformat(timespec="seconds")
 
     def _fetch_progress(self, done: int, count: int, total: int) -> None:
+        if self.cancelled:
+            raise BacktestCancelled()
         self.progress = int(35 * done / max(1, count))
         self.stage = f"descargando históricos ({done}/{count})"
 
@@ -982,10 +1007,17 @@ class BacktestService:
     def get(self, job_id: str) -> BacktestJob | None:
         return self.jobs.get(job_id)
 
+    def cancel(self, job_id: str) -> dict[str, Any] | None:
+        job = self.jobs.get(job_id)
+        if not job:
+            return None
+        job.cancel()
+        return job.snapshot()
+
     def latest(self) -> dict[str, Any] | None:
         if self.latest_id:
             job = self.jobs.get(self.latest_id)
-            if job:
+            if job and (job.status == "running" or (job.status == "done" and job.result)):
                 return job.snapshot()
         if self._last:
             return {

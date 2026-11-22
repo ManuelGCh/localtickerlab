@@ -270,6 +270,10 @@ def action_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+class ScanBusy(RuntimeError):
+    """Otro proceso está ejecutando un escaneo."""
+
+
 class ScreenJob:
     def __init__(self, universe: str, params: dict[str, Any]) -> None:
         self.id = uuid.uuid4().hex[:12]
@@ -291,6 +295,7 @@ class ScreenJob:
         self.enrich_done = 0
         self.enrich_errors = 0
         self.regime: dict[str, Any] = {}
+        self._lock_handle: Any | None = None
 
     # -- estado ------------------------------------------------------------ #
     def snapshot(self, include_rows: bool = True) -> dict[str, Any]:
@@ -366,7 +371,11 @@ class ScreenJob:
             self.error = str(exc)
         finally:
             self.finished_at = store.now_ny().isoformat(timespec="seconds")
-            self.persist()
+            try:
+                self.persist()
+            finally:
+                store.release_scan_lock(self._lock_handle)
+                self._lock_handle = None
 
     def _sort_rows(self) -> None:
         self.rows.sort(key=lambda r: r["score"], reverse=True)
@@ -700,26 +709,39 @@ class ScreenerService:
             if running and running.status == "running" and force:
                 running.cancel()
 
-            if universe == "watchlist":
-                rows = [{"symbol": s.strip().upper()} for s in (symbols or []) if s.strip()]
-                filtered = rows
-            else:
-                rows = self.universes.get(universe, force=force)
-                filtered = apply_filters(rows, params)
+            lock_handle = store.acquire_scan_lock()
+            if lock_handle is None:
+                raise ScanBusy("Ya hay un escaneo en curso; espera a que termine.")
+            try:
+                if universe == "watchlist":
+                    rows = [{"symbol": s.strip().upper()} for s in (symbols or []) if s.strip()]
+                    filtered = rows
+                else:
+                    rows = self.universes.get(universe, force=force)
+                    filtered = apply_filters(rows, params)
 
-            symbols = [row["symbol"] for row in filtered]
-            if params.get("max_symbols"):
-                symbols = symbols[: int(params["max_symbols"])]
+                symbols = [row["symbol"] for row in filtered]
+                if params.get("max_symbols"):
+                    symbols = symbols[: int(params["max_symbols"])]
 
-            job = ScreenJob(universe, params)
-            self.jobs[job.id] = job
-            self._latest[universe] = job.id
-            self._prune_jobs()
+                job = ScreenJob(universe, params)
+                job._lock_handle = lock_handle
+                self.jobs[job.id] = job
+                self._latest[universe] = job.id
+                self._prune_jobs()
+            except Exception:
+                store.release_scan_lock(lock_handle)
+                raise
 
         thread = threading.Thread(
             target=job.run, args=(symbols, self.data), name=f"screen-{job.id}", daemon=True
         )
-        thread.start()
+        try:
+            thread.start()
+        except Exception:
+            store.release_scan_lock(lock_handle)
+            job._lock_handle = None
+            raise
         return job
 
     def _prune_jobs(self, keep: int = 6) -> None:

@@ -194,6 +194,57 @@
     };
   }
 
+  async function loadUserPrefs() {
+    let serverWatch = null;
+    let serverViews = null;
+    try {
+      const [watch, views] = await Promise.all([api("/api/watchlist"), api("/api/views")]);
+      serverWatch = watch.symbols;
+      serverViews = views.views;
+    } catch (e) {
+      return;
+    }
+    if (!store.get("sl.prefsMigrated", false)) {
+      const localWatch = storedArray("sl.watchlist", []).filter(
+        (symbol) => typeof symbol === "string"
+      );
+      const localViews = storedArray("sl.views", []).filter(
+        (view) => view && typeof view === "object" && view.name && view.config
+      );
+      try {
+        for (const symbol of localWatch) {
+          await api("/api/watchlist/add", { symbol });
+        }
+        for (const view of localViews) {
+          await api("/api/views/save", {
+            name: view.name,
+            config: JSON.stringify(view.config),
+          });
+        }
+        const [watch, views] = await Promise.all([api("/api/watchlist"), api("/api/views")]);
+        serverWatch = watch.symbols;
+        serverViews = views.views;
+        store.set("sl.prefsMigrated", true);
+      } catch (e) {
+        /* si falla, seguimos con la copia local */
+      }
+    }
+    if (Array.isArray(serverWatch)) {
+      state.watchlist = serverWatch.filter((symbol) => typeof symbol === "string");
+      store.set("sl.watchlist", state.watchlist);
+    }
+    if (Array.isArray(serverViews)) {
+      state.views = serverViews.filter((view) => view && typeof view === "object");
+      store.set("sl.views", state.views);
+    }
+    refreshWatchBadge();
+    renderWatchlist();
+    if (state.current) updateStarButton();
+    if ($("#viewsPanel") && !$("#viewsPanel").classList.contains("hidden")) {
+      renderViewsPanel();
+    }
+  }
+
   function init() {
     state.initializing = true;
     wireTabs();
@@ -202,6 +253,7 @@
     wireWatch();
     wireBacktest();
     wirePortfolio();
+    loadUserPrefs();
     loadStatus();
     restoreUniverse();
     refreshWatchBadge();
@@ -453,15 +505,21 @@
     });
   }
 
-  function saveView() {
+  async function saveView() {
     const name = (window.prompt("Nombre de la vista:") || "").trim();
     if (!name) return;
     const config = currentViewConfig();
-    const existing = state.views.findIndex((view) => view.name === name);
-    if (existing >= 0) state.views[existing] = { name, config };
-    else state.views.push({ name, config });
-    store.set("sl.views", state.views);
-    renderViewsPanel();
+    try {
+      const data = await api("/api/views/save", {
+        name,
+        config: JSON.stringify(config),
+      });
+      if (Array.isArray(data.views)) state.views = data.views;
+      store.set("sl.views", state.views);
+      renderViewsPanel();
+    } catch (e) {
+      window.alert(e.message);
+    }
   }
 
   function applyView(index) {
@@ -502,10 +560,18 @@
     loadLatest(universe);
   }
 
-  function deleteView(index) {
-    state.views.splice(index, 1);
-    store.set("sl.views", state.views);
-    renderViewsPanel();
+  async function deleteView(index) {
+    const view = state.views[index];
+    if (!view) return;
+    try {
+      const data = await api("/api/views/delete", { name: view.name });
+      if (Array.isArray(data.views)) state.views = data.views;
+      else state.views.splice(index, 1);
+      store.set("sl.views", state.views);
+      renderViewsPanel();
+    } catch (e) {
+      window.alert(e.message);
+    }
   }
 
   function buildColumnPanel() {
@@ -2043,8 +2109,9 @@
 
   /* ================= WATCHLIST ================= */
   function wireWatch() {
-    $("#clearWatch").addEventListener("click", () => {
+    $("#clearWatch").addEventListener("click", async () => {
       if (!state.watchlist.length) return;
+      const before = [...state.watchlist];
       state.watchlist = [];
       state.watchRows = {};
       store.set("sl.watchlist", []);
@@ -2052,6 +2119,15 @@
       renderWatchlist();
       renderScreenTable();
       updateStarButton();
+      try {
+        await api("/api/watchlist/clear");
+      } catch (e) {
+        state.watchlist = before;
+        store.set("sl.watchlist", state.watchlist);
+        refreshWatchBadge();
+        renderWatchlist();
+        window.alert(e.message);
+      }
     });
     $("#analyzeWatch").addEventListener("click", () => {
       setTab("screen");
@@ -2065,7 +2141,9 @@
     });
   }
 
-  function toggleWatch(symbol) {
+  async function toggleWatch(symbol) {
+    const before = [...state.watchlist];
+    const adding = !state.watchlist.includes(symbol);
     const idx = state.watchlist.indexOf(symbol);
     if (idx >= 0) state.watchlist.splice(idx, 1);
     else state.watchlist.push(symbol);
@@ -2073,6 +2151,23 @@
     store.set("sl.watchlist", state.watchlist);
     refreshWatchBadge();
     updateStarButton();
+    try {
+      const data = await api(adding ? "/api/watchlist/add" : "/api/watchlist/remove", {
+        symbol,
+      });
+      if (Array.isArray(data.symbols)) {
+        state.watchlist = data.symbols;
+        store.set("sl.watchlist", state.watchlist);
+        refreshWatchBadge();
+        updateStarButton();
+      }
+    } catch (e) {
+      state.watchlist = before;
+      store.set("sl.watchlist", state.watchlist);
+      refreshWatchBadge();
+      updateStarButton();
+      window.alert(e.message);
+    }
   }
 
   function refreshWatchBadge() {
@@ -2194,7 +2289,7 @@
     $("#importFile").addEventListener("change", async (event) => {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
-      if (!window.confirm(`¿Importar ${file.name}? Se añadirán posiciones y alertas, sin borrar las actuales.`)) {
+      if (!window.confirm(`¿Importar ${file.name}? Se añadirán posiciones, alertas, watchlist y vistas, sin borrar las actuales.`)) {
         event.target.value = "";
         return;
       }
@@ -2207,7 +2302,10 @@
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Error al importar");
-        window.alert(`Importado: ${data.positions} posiciones y ${data.alerts} alertas.`);
+        window.alert(
+          `Importado: ${data.positions} posiciones, ${data.alerts} alertas, ` +
+            `${data.watchlist || 0} valores de watchlist y ${data.views || 0} vistas.`
+        );
         loadPortfolio();
       } catch (e) {
         window.alert(e.message);
@@ -2622,6 +2720,7 @@
   /* ================= BACKTEST ================= */
   function wireBacktest() {
     $("#btRun").addEventListener("click", startBacktest);
+    $("#btCancel").addEventListener("click", cancelBacktest);
     $("#btAdvancedBtn").addEventListener("click", () => {
       const panel = $("#btAdvancedBtn").closest(".controls");
       panel.classList.toggle("is-expanded");
@@ -2716,6 +2815,7 @@
           store.set("sl.btJob", null);
           $("#btRun").disabled = false;
           if (job.status === "done" && job.result) {
+            $("#btCancel").classList.add("hidden");
             renderBacktest(job.result);
             clearTimeout(state.hideBtTimer);
             state.hideBtTimer = setTimeout(
@@ -2723,6 +2823,8 @@
               2500
             );
             loadStatus();
+          } else if (job.status === "cancelled") {
+            showBtError("Backtest cancelado.");
           } else {
             showBtError(job.error || "El backtest no terminó correctamente");
           }
@@ -2743,12 +2845,22 @@
   function showBtProgress(job) {
     clearTimeout(state.hideBtTimer);
     state.hideBtTimer = null;
+    const cancelling = !!job.cancelling;
+    const cancelBtn = $("#btCancel");
+    cancelBtn.classList.toggle("hidden", job.status !== "running");
+    cancelBtn.disabled = cancelling;
+    cancelBtn.textContent = cancelling ? "Cancelando…" : "Cancelar backtest";
     const pct = Math.max(0, Math.min(100, job.progress || 0));
     $("#btProgressPanel").classList.remove("hidden");
     $("#btProgressFill").style.width = pct + "%";
     $("#btPct").textContent = pct + "%";
-    $("#btProgressTitle").textContent =
-      job.status === "running" ? "Ejecutando backtest…" : job.status === "done" ? "Backtest completado" : "Backtest detenido";
+    $("#btProgressTitle").textContent = cancelling
+      ? "Cancelando backtest…"
+      : job.status === "running"
+        ? "Ejecutando backtest…"
+        : job.status === "done"
+          ? "Backtest completado"
+          : "Backtest detenido";
     $("#btStage").textContent = job.stage ? `· ${job.stage}` : "";
     if (job.status === "running") {
       $("#btMeta").textContent = "El cálculo sigue en el servidor aunque cambies de pestaña.";
@@ -2759,7 +2871,22 @@
     $("#btError").textContent = message;
     $("#btError").classList.remove("hidden");
     $("#btProgressPanel").classList.add("hidden");
+    $("#btCancel").classList.add("hidden");
     $("#btRun").disabled = false;
+  }
+
+  async function cancelBacktest() {
+    if (!state.btJobId) return;
+    const btn = $("#btCancel");
+    btn.disabled = true;
+    btn.textContent = "Cancelando…";
+    try {
+      await api("/api/backtest/cancel", { id: state.btJobId });
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "Cancelar backtest";
+      window.alert(e.message);
+    }
   }
 
   function renderBacktest(r) {

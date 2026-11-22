@@ -133,5 +133,16 @@ class TestCalibration(unittest.TestCase):
         self.assertIn("momentum", [f["factor"] for f in a["factors"]])
 
 
+class TestBacktestCancel(unittest.TestCase):
+    def test_cancel_marks_job_as_cancelling(self):
+        job = bt.BacktestJob(bt.BacktestConfig())
+        self.assertFalse(job.cancelled)
+        job.cancel()
+        self.assertTrue(job.cancelled)
+        self.assertTrue(job.snapshot()["cancelling"])
+        job.status = "cancelled"
+        self.assertFalse(job.snapshot()["cancelling"])
+
+
 if __name__ == "__main__":
     unittest.main()

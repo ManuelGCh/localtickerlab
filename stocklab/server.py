@@ -36,6 +36,14 @@ ROUTES = {
     "/api/system/retry": "system_retry",
     "/api/backup": "backup",
     "/api/user-data/export": "user_export",
+    "/api/watchlist": "watchlist_get",
+    "/api/watchlist/add": "watchlist_add",
+    "/api/watchlist/remove": "watchlist_remove",
+    "/api/watchlist/replace": "watchlist_replace",
+    "/api/watchlist/clear": "watchlist_clear",
+    "/api/views": "views_list",
+    "/api/views/save": "views_save",
+    "/api/views/delete": "views_delete",
     "/api/alerts": "alerts_list",
     "/api/alerts/add": "alerts_add",
     "/api/alerts/delete": "alerts_delete",
@@ -49,6 +57,7 @@ ROUTES = {
     "/api/backtest/start": "backtest_start",
     "/api/backtest/status": "backtest_status",
     "/api/backtest/latest": "backtest_latest",
+    "/api/backtest/cancel": "backtest_cancel",
     "/api/backtest/calibrate": "backtest_calibrate",
 }
 

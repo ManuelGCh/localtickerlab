@@ -82,6 +82,34 @@ class TestScreenerRefresh(unittest.TestCase):
         self.assertIsNone(refreshed[0]["quality"])
         self.assertFalse(refreshed[0]["enriched"])
 
+    def test_scan_lock_is_exclusive(self):
+        first = store.acquire_scan_lock()
+        self.assertIsNotNone(first)
+        try:
+            second = store.acquire_scan_lock()
+            self.assertIsNone(second)
+        finally:
+            store.release_scan_lock(first)
+        again = store.acquire_scan_lock()
+        self.assertIsNotNone(again)
+        store.release_scan_lock(again)
+
+    def test_watchlist_and_views_roundtrip(self):
+        store.add_watch("msft")
+        store.add_watch("AAPL")
+        self.assertEqual(store.list_watchlist(), ["AAPL", "MSFT"])
+        store.replace_watchlist(["NVDA", "AAPL"])
+        self.assertEqual(store.list_watchlist(), ["AAPL", "NVDA"])
+        store.save_view("Tecnología", {"universe": "ndx", "signal": "COMPRA"})
+        views = store.list_views()
+        self.assertEqual(views[0]["name"], "Tecnología")
+        self.assertEqual(views[0]["config"]["signal"], "COMPRA")
+        exported = store.export_user_data()
+        self.assertEqual(exported["watchlist"], ["AAPL", "NVDA"])
+        self.assertTrue(exported["views"])
+        store.delete_view("Tecnología")
+        self.assertEqual(store.list_views(), [])
+
     def test_upsert_instruments_keeps_sector_when_source_lacks_it(self):
         store.upsert_instruments(
             [{"symbol": "AAPL", "name": "Apple Inc.", "sector": "Technology"}]
