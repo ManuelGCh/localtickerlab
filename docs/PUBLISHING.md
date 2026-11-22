@@ -10,9 +10,12 @@
 - [ ] No se publica una instancia del servidor: consume datos de terceros y requeriría
       autenticación, límites y una revisión de ToS. Mejor vídeo + repositorio.
 - [ ] Licencia MIT incluida.
+- [ ] Repo creado en GitHub, README renderizado y social preview subida.
 
 ## Assets
 
+- Icono: `web/assets/brand/icon.svg` · favicon y PNG en `web/assets/brand/`
+- Social preview de GitHub: `docs/social-preview.png` (1280×640)
 - `docs/screenshots/01-screener.png`
 - `docs/screenshots/02-analisis.png`
 - `docs/screenshots/03-backtest.png`

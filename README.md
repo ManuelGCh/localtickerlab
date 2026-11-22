@@ -1,8 +1,14 @@
-# StockLab · Analizador NASDAQ
+<p align="center">
+  <img src="web/assets/brand/icon.svg" width="96" alt="StockLab" />
+</p>
 
+<h1 align="center">StockLab · Analizador NASDAQ</h1>
+
+<p align="center">
 Dashboard local para analizar acciones del NASDAQ: descarga precios diarios, calcula
 indicadores técnicos, puntúa cada valor de 0 a 100 y permite comparar todo el índice
 o estudiar un ticker concreto.
+</p>
 
 Sin dependencias externas: solo **Python 3.10+** (probado en 3.14) y la biblioteca estándar.
 Los datos se guardan en una base SQLite local, así que las siguientes ejecuciones son

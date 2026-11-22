@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="StockLab: velas y validación">
+  <defs>
+    <clipPath id="clip-candles"><rect width="512" height="512" rx="112"/></clipPath>
+    <linearGradient id="bg-c" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111b2e"/>
+      <stop offset="100%" stop-color="#0b0f16"/>
+    </linearGradient>
+    <linearGradient id="mark-c" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <radialGradient id="glow-c" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g clip-path="url(#clip-candles)">  <rect width="512" height="512" rx="112" fill="url(#bg-c)"/>
+  <rect x="6" y="6" width="500" height="500" rx="106" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="2"/>
+  <circle cx="300" cy="190" r="180" fill="url(#glow-c)"/>
+  <rect x="126" y="286" width="62" height="124" rx="22" fill="url(#mark-c)" fill-opacity="0.30"/>
+  <rect x="224" y="222" width="62" height="188" rx="22" fill="url(#mark-c)" fill-opacity="0.55"/>
+  <rect x="322" y="146" width="62" height="264" rx="22" fill="url(#mark-c)"/>
+  <circle cx="394" cy="390" r="64" fill="#22d3ee"/>
+  <path d="M364 390 L386 412 L424 366" fill="none" stroke="#0b0f16" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
