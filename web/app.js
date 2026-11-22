@@ -83,6 +83,8 @@
     chart: null,
     chartRange: 126,
     compareChart: null,
+    analyzeTab: "resumen",
+    portfolioTab: "positions",
     watchRows: {},
     loadingWatch: false,
     btJobId: null,
@@ -162,10 +164,13 @@
       universe: params.get("universe") || "",
       signal: params.get("signal") || "",
       symbol: (params.get("symbol") || "").toUpperCase() || "",
+      atab: params.get("atab") || "",
+      ptab: params.get("ptab") || "",
     };
   }
 
   function init() {
+    state.initializing = true;
     wireTabs();
     wireScreen();
     wireAnalyze();
@@ -186,6 +191,8 @@
       state.signal = initial.signal;
     }
     setTab(initial.tab || "screen");
+    if (initial.atab) setAnalyzeTab(initial.atab);
+    if (initial.ptab) setPortfolioTab(initial.ptab);
     if (initial.symbol) {
       $("#symbolSearch").value = initial.symbol;
       analyze(initial.symbol);
@@ -203,6 +210,8 @@
       }
       if (initial.tab && initial.tab !== state.tab) setTab(initial.tab);
     });
+    state.initializing = false;
+    updateHash();
   }
 
   function wireTabs() {
@@ -212,13 +221,18 @@
   }
 
   function updateHash() {
+    if (state.initializing) return;
     const params = new URLSearchParams();
     if (state.tab === "screen" && state.universe) {
       params.set("universe", state.universe);
       if (state.signal) params.set("signal", state.signal);
     }
-    if (state.tab === "analyze" && state.current) {
-      params.set("symbol", state.current.symbol);
+    if (state.tab === "analyze") {
+      if (state.current) params.set("symbol", state.current.symbol);
+      if (state.analyzeTab && state.analyzeTab !== "resumen") params.set("atab", state.analyzeTab);
+    }
+    if (state.tab === "portfolio" && state.portfolioTab !== "positions") {
+      params.set("ptab", state.portfolioTab);
     }
     const suffix = params.toString();
     history.replaceState(null, "", `#${state.tab}${suffix ? `?${suffix}` : ""}`);
@@ -875,7 +889,6 @@
           </div>
           <div class="stock-card-foot">
             <span class="muted small">Toca para analizar</span>
-            <span class="muted small">${Math.round(row.score)}/100</span>
           </div>
         </div>`;
       })
@@ -1017,31 +1030,7 @@
       .join("");
   }
 
-  function renderSignalSummary() {
-    const box = $("#signalSummary");
-    const counts = Object.keys(state.screenCounts).length ? state.screenCounts : {};
-    if (!Object.keys(counts).length) {
-      state.rows.forEach((r) => {
-        if (r.action) counts[r.action] = (counts[r.action] || 0) + 1;
-      });
-    }
-    const order = ["COMPRA FUERTE", "COMPRA", "NEUTRAL", "VENTA", "VENTA FUERTE"];
-    let html = "";
-    if (state.screenTotal) {
-      html += `<span class="sig-count"><i style="background:#8b93ff"></i>Analizados <b>${nf0.format(state.screenTotal)}</b></span>`;
-    }
-    html += order
-      .filter((a) => counts[a])
-      .map(
-        (a) => `<span class="sig-count ${ACTION_CLASS[a]}"><i></i>${a} <b>${counts[a]}</b></span>`
-      )
-      .join("");
-    box.innerHTML = html;
-    box.classList.toggle("hidden", !html);
-  }
-
   function renderScreenTable() {
-    renderSignalSummary();
     const body = $("#screenBody");
     const empty = $("#screenEmpty");
     const table = $("#screenTable");
@@ -1369,6 +1358,7 @@
   }
 
   function setAnalyzeTab(tab) {
+    state.analyzeTab = tab;
     $$("#analyzeTabs .subtab").forEach((btn) => {
       btn.classList.toggle("is-active", btn.dataset.atab === tab);
     });
@@ -1381,6 +1371,7 @@
     if (tab === "comparar" && state.compareChart) {
       requestAnimationFrame(() => state.compareChart.resize());
     }
+    updateHash();
   }
 
   async function loadSuggestions(q) {
@@ -1568,12 +1559,10 @@
 
   async function loadFundamentals(symbol, force) {
     const token = ++state.fundToken;
-    $("#fundamentalsCard").classList.remove("hidden");
+    $("#fundamentalsCard").classList.toggle("hidden", state.analyzeTab !== "resultados");
     $("#fundamentalsLoading").classList.remove("hidden");
     $("#fundamentalsBody").classList.add("hidden");
     $("#fundamentalsError").classList.add("hidden");
-    $("#fQuality").textContent = "cargando…";
-    $("#fQuality").className = "quality-pill";
     try {
       const data = await api("/api/fundamentals", { symbol, force: force ? 1 : 0 });
       if (token !== state.fundToken) return;
@@ -1583,13 +1572,12 @@
       $("#fundamentalsLoading").classList.add("hidden");
       $("#fundamentalsError").textContent = e.message;
       $("#fundamentalsError").classList.remove("hidden");
-      $("#fQuality").textContent = "sin datos";
     }
   }
 
   async function loadNews(symbol, force) {
     const token = ++state.newsToken;
-    $("#newsCard").classList.remove("hidden");
+    $("#newsCard").classList.toggle("hidden", state.analyzeTab !== "noticias");
     $("#newsLoading").classList.remove("hidden");
     $("#newsBody").classList.add("hidden");
     $("#newsSentiment").textContent = "cargando…";
@@ -1612,20 +1600,31 @@
   function renderNews(data) {
     const sentiment = data.sentiment || {};
     const score = sentiment.score || 50;
+    const label = sentiment.label || "Neutro";
     const pill = $("#newsSentiment");
-    pill.textContent = `${Math.round(score)} · ${sentiment.label || "Neutro"}`;
+    pill.textContent = label;
+    pill.title = `Tono de los titulares (${Math.round(score)}/100). Es contexto, no una señal.`;
     pill.className =
       "quality-pill " + (score >= 60 ? "good" : score <= 40 ? "bad" : "mid");
 
     const dot = (value) =>
       `<span class="news-dot ${value > 0 ? "pos" : value < 0 ? "neg" : "neu"}"></span>`;
     const items = (data.items || []).slice(0, 8);
+    const cleanTitle = (item) => {
+      let title = item.title || "";
+      if (item.source) {
+        title = title
+          .replace(new RegExp(`\\s*[\\-|–—]\\s*${item.source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i"), "")
+          .trim();
+      }
+      return title;
+    };
     $("#newsList").innerHTML = items
       .map(
         (item) => `<div class="news-item">
           ${dot(item.sentiment)}
           <div>
-            <a class="news-title" href="${escapeAttr(item.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>
+            <a class="news-title" href="${escapeAttr(item.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanTitle(item))}</a>
             <div class="news-meta">
               ${item.source ? `<span>${escapeHtml(item.source)}</span>` : ""}
               ${item.published ? `<span>${fmt.date(item.published)}</span>` : ""}
@@ -1672,9 +1671,6 @@
     $("#fundamentalsLoading").classList.add("hidden");
     $("#fundamentalsBody").classList.remove("hidden");
 
-    const pill = $("#fQuality");
-    pill.textContent = `Calidad ${Math.round(score)} · ${q.label || ""}`;
-    pill.className = "quality-pill " + (score >= 60 ? "good" : score >= 45 ? "mid" : "bad");
     $("#fScore").textContent = Math.round(score);
     $("#fLabel").textContent = q.label || "";
 
@@ -1719,6 +1715,7 @@
     $("#fEarningsBlock").innerHTML = earnings;
 
     $("#fQuarters tbody").innerHTML = (d.quarters || [])
+      .slice(0, 6)
       .map(
         (row) => `<tr>
           <td>${quarterLabel(row.period)}</td>
@@ -1731,7 +1728,7 @@
       .join("");
 
     $("#fSurprises tbody").innerHTML = (d.surprises || [])
-      .slice(0, 8)
+      .slice(0, 6)
       .map(
         (row) => `<tr>
           <td>${escapeHtml(row.period || "—")}</td>
@@ -2003,6 +2000,20 @@
       const btn = event.target.closest("[data-pf-delete]");
       if (btn) deletePosition(btn.dataset.pfDelete);
     });
+    const pfCards = $("#pfCards");
+    if (pfCards) {
+      pfCards.addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-pf-delete]");
+        if (btn) deletePosition(btn.dataset.pfDelete);
+      });
+    }
+    const pfMore = $("#pfMore");
+    if (pfMore) {
+      pfMore.addEventListener("click", () => {
+        const hidden = $("#pfTotalsExtra").classList.toggle("hidden");
+        pfMore.textContent = hidden ? "Más métricas" : "Menos métricas";
+      });
+    }
     $("#alList").addEventListener("click", (event) => {
       const del = event.target.closest("[data-al-delete]");
       const toggle = event.target.closest("[data-al-toggle]");
@@ -2014,6 +2025,7 @@
   }
 
   function setPortfolioTab(tab) {
+    state.portfolioTab = tab;
     $$("#portfolioTabs .subtab").forEach((btn) => {
       btn.classList.toggle("is-active", btn.dataset.ptab === tab);
     });
@@ -2021,6 +2033,7 @@
       panel.classList.toggle("hidden", panel.dataset.ppanel !== tab);
     });
     if (tab === "watch") renderWatchlist();
+    updateHash();
   }
 
   function updateAlertForm() {
@@ -2076,7 +2089,7 @@
     const totals = data.totals || {};
     const card = (k, v, s, cls) =>
       `<div class="metric"><div class="k">${k}</div><div class="v ${cls || ""}">${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
-    $("#pfTotals").innerHTML = [
+    const cards = [
       card("Valor", fmt.money(totals.value), `${totals.count || 0} posiciones`),
       card("Coste", fmt.money(totals.cost), "invertido"),
       card("P&L", fmt.money(totals.pnl), fmt.pct(totals.pnl_pct, 1), (totals.pnl || 0) >= 0 ? "pos" : "neg"),
@@ -2094,11 +2107,40 @@
             card("Máx. caída", fmt.pct(-(data.risk.max_drawdown || 0), 1), "cartera", "neg"),
           ]
         : []),
-    ].join("");
+    ];
+    $("#pfTotals").innerHTML = cards.slice(0, 4).join("");
+    const extraBox = $("#pfTotalsExtra");
+    if (extraBox) extraBox.innerHTML = cards.slice(4).join("");
+    const moreBtn = $("#pfMore");
+    if (moreBtn) moreBtn.classList.toggle("hidden", cards.length <= 4);
 
     const positions = data.positions || [];
     $("#pfEmpty").classList.toggle("hidden", positions.length > 0);
     $("#pfTable").classList.toggle("hidden", positions.length === 0);
+    const pfCards = $("#pfCards");
+    if (pfCards) {
+      pfCards.innerHTML = positions
+        .map(
+          (p) => `<div class="stock-card">
+            <div class="stock-card-head">
+              <div class="stock-card-id"><strong>${escapeHtml(p.symbol)}</strong><span>${nf2.format(p.shares)} acc. · entrada ${fmt.price(p.entry_price)}</span></div>
+              <div class="stock-card-price"><strong>${fmt.price(p.price)}</strong><span class="${(p.pnl || 0) >= 0 ? "pos" : "neg"}">${fmt.money(p.pnl)} · ${fmt.pct(p.pnl_pct, 1)}</span></div>
+            </div>
+            <div class="stock-card-tags">
+              ${actionBadge(p.signal)}
+              <span class="tag">${fmt.money(p.value)}</span>
+              <span class="tag">${fmt.pct(p.weight, 1)}</span>
+              ${p.stop ? `<span class="tag">Stop ${fmt.price(p.stop)}</span>` : ""}
+              ${p.target ? `<span class="tag">Obj. ${fmt.price(p.target)}</span>` : ""}
+            </div>
+            <div class="stock-card-foot">
+              <span class="muted small">${p.risk_amount != null ? "Riesgo " + fmt.money(p.risk_amount) : ""}</span>
+              <button class="icon-btn" data-pf-delete="${p.id}" title="Eliminar">✕</button>
+            </div>
+          </div>`
+        )
+        .join("");
+    }
     $("#pfTable tbody").innerHTML = positions
       .map(
         (p) => `<tr>
@@ -2443,18 +2485,16 @@
     const oosPeriod = r.oos || {};
     const cards = [
       card(
-        "IC medio",
-        ic.mean != null ? ic.mean.toFixed(3) : "—",
-        `${fmt.pct(ic.positive_ratio, 0)} de fechas positivas`
-      ),
-      card(
         "IC out-of-sample",
         oosPeriod.ic != null ? oosPeriod.ic.toFixed(3) : "—",
         oosPeriod.start ? `${fmt.date(oosPeriod.start)} → ${fmt.date(oosPeriod.end)}` : "sin datos",
         (oosPeriod.ic || 0) >= 0 ? "pos" : "neg"
       ),
-      card("Cartera", fmt.pct(p.total, 1), `QQQ ${fmt.pct(p.bench_total, 1)}`, (p.total || 0) >= 0 ? "pos" : "neg"),
-      card("Máx. caída", fmt.pct(-(p.max_drawdown || 0), 1), `QQQ ${fmt.pct(-(p.bench_max_drawdown || 0), 1)}`, "neg"),
+      card(
+        "IC medio",
+        ic.mean != null ? ic.mean.toFixed(3) : "—",
+        `${fmt.pct(ic.positive_ratio, 0)} de fechas positivas`
+      ),
       card("Acierto compras", fmt.pct(buyHit, 1), "periodos positivos"),
       card("Objetivo antes de stop", fmt.pct(t.hit_rate, 1), `${nf0.format(t.evaluated || 0)} señales`),
     ];
@@ -2467,6 +2507,15 @@
         )
       );
     }
+    cards.push(
+      card(
+        "Cartera in-sample",
+        fmt.pct(p.total, 1),
+        `simulación · QQQ ${fmt.pct(p.bench_total, 1)}`,
+        (p.total || 0) >= 0 ? "pos" : "neg"
+      ),
+      card("Máx. caída in-sample", fmt.pct(-(p.max_drawdown || 0), 1), `QQQ ${fmt.pct(-(p.bench_max_drawdown || 0), 1)}`, "neg")
+    );
     $("#btKpis").innerHTML = cards.join("");
 
     $("#btCoverage").textContent = r.coverage
@@ -2499,7 +2548,7 @@
     if (cfg.cost_bps != null) $("#btCost").value = String(cfg.cost_bps);
     if (cfg.top_n) $("#btTopN").value = String(cfg.top_n);
     $("#btQuality").checked = !!cfg.include_quality;
-    $("#btMeta").textContent = `${r.coverage.symbols} valores · ${cfg.years} años · horizonte ${cfg.horizon} sesiones · rebalanceo ${cfg.rebalance} · ${cfg.include_quality ? "con" : "sin"} calidad SEC · coste ${cfg.cost_bps} pb`;
+    $("#btMetaResults").textContent = `${r.coverage.symbols} valores · ${cfg.years} años · horizonte ${cfg.horizon} sesiones · rebalanceo ${cfg.rebalance} · ${cfg.include_quality ? "con" : "sin"} calidad SEC · coste ${cfg.cost_bps} pb`;
 
     const oosRows = [
       ["In-sample", r.is],

@@ -729,7 +729,7 @@ p { margin: 0; line-height: 1.6; }
   --text: #e7ecf3;
   --muted: #8a97a9;
   --accent: #6d7cff;
-  --accent-2: #5b6cff;
+  --accent-2: #4f5fe8;
   --pos: #4ade80;
   --neg: #f87171;
   --warn: #fbbf24;
@@ -767,7 +767,7 @@ h1 { font-size: 23px; font-weight: 640; letter-spacing: -0.02em; }
 }
 .btn:hover { background: rgba(255, 255, 255, 0.08); }
 .btn.primary { background: var(--accent-2); border-color: var(--accent-2); box-shadow: none; }
-.btn.primary:hover { background: #6b7bff; }
+.btn.primary:hover { background: #4654d6; }
 .btn.ghost { background: transparent; }
 
 .field label { font-size: 9.5px; letter-spacing: 0.09em; color: var(--muted); }
@@ -907,3 +907,62 @@ details.diag > .diag-body { padding: 0 20px 18px; }
 
 .corr-table { width: auto; }
 .corr-table td { min-width: 64px; }
+
+/* ---------------- Ajustes finales de jerarquía ---------------- */
+
+/* Resultados: bloques más compactos para no competir con el gráfico */
+.fund-top { gap: 10px; margin: 12px 0 14px; }
+.fund-block { padding: 12px 14px; }
+.fund-block .fund-v { font-size: 17px; }
+.fund-block .fund-s { font-size: 11px; }
+.fund-grid { gap: 12px; margin-top: 4px; }
+.fund-grid .data-table th,
+.fund-grid .data-table td { padding-top: 6px; padding-bottom: 6px; }
+.subscores { gap: 7px; }
+.fund-risks { margin-top: 10px; }
+
+/* Sentimiento de noticias: etiqueta, no un número que parezca preciso */
+#newsSentiment { cursor: help; }
+
+/* Cartera: tarjetas móviles y acciones táctiles */
+.stock-cards { display: none; flex-direction: column; gap: 8px; }
+@media (max-width: 760px) {
+  .stock-cards { display: flex; }
+  #pfTable { display: none !important; }
+  .al-item { align-items: flex-start; gap: 10px; }
+  .al-item .al-actions { flex-shrink: 0; }
+  .al-item .icon-btn { min-width: 34px; min-height: 34px; }
+  .pf-form { grid-template-columns: 1fr 1fr; }
+  .pf-form input, .pf-form select { min-width: 0; width: 100%; }
+  .pf-form .btn { grid-column: 1 / -1; }
+  #pfSuggestion { grid-column: 1 / -1; }
+  .news-title { font-size: 13px; line-height: 1.35; }
+  .metric-grid { grid-template-columns: 1fr 1fr; }
+  .metric-grid .metric .v { font-size: 17px; }
+}
+
+@media (max-width: 420px) {
+  .metric-grid { grid-template-columns: 1fr; }
+  .view-head { flex-direction: column; gap: 10px; align-items: stretch; }
+  .view-head > div:first-child { flex: 0 1 auto; }
+  .head-actions { flex-wrap: wrap; }
+  .stock-card-tags .tag { font-size: 10.5px; }
+}
+
+/* Resultados en pantallas estrechas: el margen bruto es secundario */
+@media (max-width: 480px) {
+  .fund-grid .data-table { font-size: 10.5px; }
+  .fund-grid .data-table th,
+  .fund-grid .data-table td { padding-left: 6px; padding-right: 6px; }
+  #fQuarters th:nth-child(3),
+  #fQuarters td:nth-child(3) { display: none; }
+}
+
+/* Tablas de backtest legibles en móvil */
+@media (max-width: 480px) {
+  .bt-panel .data-table { font-size: 10px; }
+  .bt-panel .data-table th,
+  .bt-panel .data-table td { padding-left: 5px; padding-right: 5px; white-space: nowrap; }
+  .bt-panel .data-table th:first-child,
+  .bt-panel .data-table td:first-child { white-space: normal; }
+}

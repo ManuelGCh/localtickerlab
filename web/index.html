@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="StockLab: screener y análisis técnico del NASDAQ con validación out-of-sample, cartera y alertas. Proyecto educativo, no asesoramiento financiero." />
 <title>StockLab · Análisis NASDAQ</title>
 <link rel="stylesheet" href="/style.css" />
 </head>
@@ -107,6 +108,10 @@
           <span>Excluir fondos y SPACs</span>
         </label>
       </div>
+      <label class="check adv-field">
+        <input id="noEarnings" type="checkbox" />
+        <span>Sin resultados ≤ 7 días</span>
+      </label>
       <div class="field field-actions">
         <button class="btn ghost" id="filtersBtn">Filtros</button>
         <button class="btn primary" id="runScreen">Analizar</button>
@@ -139,7 +144,7 @@
     <div class="panel results-panel">
       <div class="results-toolbar">
         <input class="search-input" id="tableSearch" type="search" placeholder="Buscar en todo el universo: ticker, nombre o sector…" />
-        <select id="signalFilter" class="mini-select">
+        <select id="signalFilter" class="mini-select" aria-label="Filtrar por señal">
           <option value="">Todas las señales</option>
           <option value="COMPRA FUERTE">Compra fuerte</option>
           <option value="COMPRA">Compra</option>
@@ -147,16 +152,12 @@
           <option value="VENTA">Venta</option>
           <option value="VENTA FUERTE">Venta fuerte</option>
         </select>
-        <select id="qualityFilter" class="mini-select">
+        <select id="qualityFilter" class="mini-select" aria-label="Filtrar por calidad">
           <option value="">Calidad: todas</option>
           <option value="45">Calidad ≥ 45</option>
           <option value="60">Calidad ≥ 60</option>
           <option value="75">Calidad ≥ 75</option>
         </select>
-        <label class="check inline-check">
-          <input id="noEarnings" type="checkbox" />
-          <span>Sin resultados ≤ 7 días</span>
-        </label>
         <div class="col-menu">
           <button class="btn ghost" id="viewsBtn">Vistas</button>
           <div class="col-panel hidden" id="viewsPanel"></div>
@@ -164,7 +165,7 @@
         <div class="col-menu">
           <button class="btn ghost" id="dataBtn">Fundamentales</button>
           <div class="col-panel hidden" id="dataPanel">
-            <select id="enrichLimit" class="mini-select">
+            <select id="enrichLimit" class="mini-select" aria-label="Número de valores a enriquecer">
               <option value="100" selected>Top 100</option>
               <option value="300">Top 300</option>
               <option value="500">Top 500</option>
@@ -181,7 +182,6 @@
         <button class="btn ghost" id="exportCsv" title="Descargar resultados en CSV">⬇ CSV</button>
         <div class="muted small" id="resultsCount"></div>
       </div>
-      <div class="signal-summary hidden" id="signalSummary"></div>
 
       <div class="table-wrap" id="screenTableWrap">
         <table class="data-table" id="screenTable">
@@ -345,7 +345,7 @@
       <div class="panel fundamentals-card" id="fundamentalsCard" data-apanel="resultados">
         <div class="panel-head">
           <h3>Resultados y calidad</h3>
-          <span class="quality-pill" id="fQuality">cargando…</span>
+          <span class="muted small">Contexto · no puntúa</span>
         </div>
         <div class="loading small-loading" id="fundamentalsLoading">
           <div class="spinner"></div><span>Cargando resultados del trimestre…</span>
@@ -363,7 +363,7 @@
           <div class="fund-grid">
             <div class="table-wrap">
               <table class="data-table" id="fQuarters">
-                <thead><tr><th>Trimestre</th><th class="num">Ingresos</th><th class="num">M. bruto</th><th class="num">M. neto</th><th class="num">FCF</th></tr></thead>
+                <thead><tr><th>Trimestre</th><th class="num">Ingresos</th><th class="num">Bruto</th><th class="num">Neto</th><th class="num">FCF</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -509,19 +509,8 @@
     <div class="hidden" id="btContent">
       <div class="metric-grid" id="btKpis"></div>
 
-      <div class="muted small" id="btMeta" style="margin:8px 2px 0"></div>
+      <div class="muted small" id="btMetaResults" style="margin:8px 2px 0"></div>
       <p class="muted small" id="btWarn" style="margin:2px 2px 0">Resultados in-sample salvo la fila out-of-sample. La calidad SEC es contexto, no una señal validada. No garantizan retornos futuros.</p>
-
-      <div class="panel chart-card" style="margin-top:16px">
-        <div class="chart-toolbar">
-          <div class="chart-title">
-            <strong>Curva de capital</strong>
-            <span class="legend"><i class="lg" style="background:#34d399"></i>Cartera top N <i class="lg" style="background:#94a3b8"></i>QQQ</span>
-          </div>
-          <span class="muted small" id="btCoverage"></span>
-        </div>
-        <div class="chart-canvas-wrap" style="height:300px"><canvas id="btChart"></canvas></div>
-      </div>
 
       <div class="panel bt-panel" id="btOosPanel">
         <h3>In-sample vs out-of-sample</h3>
@@ -532,6 +521,20 @@
           </table>
         </div>
       </div>
+
+      <details class="panel bt-panel diag" id="btCurvePanel">
+        <summary>Simulación in-sample (no es una expectativa)</summary>
+        <div class="diag-body">
+          <div class="chart-toolbar">
+            <div class="chart-title">
+              <strong>Curva de capital</strong>
+              <span class="legend"><i class="lg" style="background:#34d399"></i>Cartera top N <i class="lg" style="background:#94a3b8"></i>QQQ</span>
+            </div>
+            <span class="muted small" id="btCoverage"></span>
+          </div>
+          <div class="chart-canvas-wrap" style="height:300px"><canvas id="btChart"></canvas></div>
+        </div>
+      </details>
 
       <details class="panel bt-panel diag" id="btWfPanel">
         <summary>Walk-forward</summary>
@@ -605,6 +608,8 @@
     </div>
 
     <div class="metric-grid" id="pfTotals"></div>
+    <div class="metric-grid hidden" id="pfTotalsExtra"></div>
+    <button class="btn ghost" id="pfMore" style="margin:8px 0 10px">Más métricas</button>
 
     <div class="subtabs" id="portfolioTabs">
       <button class="subtab is-active" data-ptab="positions">Posiciones</button>
@@ -663,6 +668,7 @@
             <tbody></tbody>
           </table>
         </div>
+        <div class="stock-cards" id="pfCards"></div>
         <div class="sector-heat" id="pfSectors" style="margin-top:10px"></div>
         <div id="pfRiskPanel" class="hidden" style="margin-top:14px">
           <h3>Correlación y riesgo</h3>
@@ -680,9 +686,9 @@
         <h3>Alertas</h3>
         <div class="pf-form">
           <input id="alSymbol" placeholder="Ticker" maxlength="10" />
-          <select id="alKind"></select>
+          <select id="alKind" aria-label="Tipo de alerta"></select>
           <input id="alValue" type="number" step="any" placeholder="Valor" />
-          <select id="alSignal" class="hidden"></select>
+          <select id="alSignal" class="hidden" aria-label="Señal de la alerta"></select>
           <button class="btn primary" id="alAdd">Crear</button>
         </div>
         <div class="al-list" id="alList"></div>
