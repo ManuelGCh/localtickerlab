@@ -1,12 +1,17 @@
 """El screener debe mostrar la última caché, no la foto del escaneo antiguo."""
 from __future__ import annotations
 
+import datetime as dt
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+from zoneinfo import ZoneInfo
 
 from stocklab import config, store
 from stocklab.screener import ScreenerService
+
+NY = ZoneInfo("America/New_York")
 
 
 class TestScreenerRefresh(unittest.TestCase):
@@ -44,6 +49,71 @@ class TestScreenerRefresh(unittest.TestCase):
         self.assertEqual(refreshed[0]["price"], 342.56)
         self.assertEqual(refreshed[0]["as_of"], "2026-11-20")
         self.assertEqual(refreshed[0]["name"], "Apple Inc.")  # conserva lo que no trae la caché
+
+    def test_quality_comes_from_fundamentals_not_score_cache(self):
+        store.save_cached_score(
+            "REGN",
+            "2026-11-20",
+            {"symbol": "REGN", "price": 900.0, "quality": 86.8, "quality_label": "Excelente"},
+        )
+        store.save_fundamentals(
+            "REGN",
+            {
+                "quality": {"score": 83.3, "label": "Excelente"},
+                "annual": {"revenue_growth": 0.01},
+                "surprises": [{"surprise_pct": 0.05}],
+                "next_earnings": {"days": 3, "date": "2026-12-01"},
+                "analyst": {"upside": 0.10},
+                "company": {"pe": 20.0},
+                "quarters": [{"period": "2026-09-30", "revenue": 1.0}],
+            },
+        )
+        refreshed = self.service.refresh([{"symbol": "REGN", "as_of": "2026-11-20"}])
+        self.assertEqual(refreshed[0]["quality"], 83.3)
+        self.assertTrue(refreshed[0]["enriched"])
+
+    def test_missing_fundamentals_clears_stale_quality(self):
+        store.save_cached_score(
+            "MDLZ",
+            "2026-11-20",
+            {"symbol": "MDLZ", "price": 60.0, "quality": 70.0, "quality_label": "Buena"},
+        )
+        refreshed = self.service.refresh([{"symbol": "MDLZ", "as_of": "2026-11-20"}])
+        self.assertIsNone(refreshed[0]["quality"])
+        self.assertFalse(refreshed[0]["enriched"])
+
+    def test_upsert_instruments_keeps_sector_when_source_lacks_it(self):
+        store.upsert_instruments(
+            [{"symbol": "AAPL", "name": "Apple Inc.", "sector": "Technology"}]
+        )
+        store.upsert_instruments([{"symbol": "AAPL", "name": "Apple Inc. Common Stock"}])
+        instrument = store.get_instrument("AAPL")
+        self.assertEqual(instrument["sector"], "Technology")
+        self.assertEqual(instrument["name"], "Apple Inc. Common Stock")
+
+    def test_stale_bars_trigger_refresh_even_after_close(self):
+        store.upsert_bars(
+            "AAPL",
+            [{"date": "2026-11-17", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}],
+        )
+        fetched = dt.datetime(2026, 11, 18, 20, 0, tzinfo=NY)
+        with mock.patch.object(store, "now_ny", return_value=fetched):
+            store.mark_synced("AAPL", "nasdaq", 700)
+        later = dt.datetime(2026, 11, 19, 3, 0, tzinfo=NY)  # 7 h después
+        with mock.patch.object(store, "now_ny", return_value=later):
+            self.assertTrue(store.needs_refresh("AAPL"))
+
+    def test_fresh_bar_does_not_force_refresh(self):
+        store.upsert_bars(
+            "AAPL",
+            [{"date": "2026-11-18", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}],
+        )
+        fetched = dt.datetime(2026, 11, 18, 20, 0, tzinfo=NY)
+        with mock.patch.object(store, "now_ny", return_value=fetched):
+            store.mark_synced("AAPL", "nasdaq", 700)
+        later = dt.datetime(2026, 11, 19, 3, 0, tzinfo=NY)
+        with mock.patch.object(store, "now_ny", return_value=later):
+            self.assertFalse(store.needs_refresh("AAPL"))
 
     def test_refresh_keeps_newer_row(self):
         store.save_cached_score(

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import sqlite3
 import threading
 from pathlib import Path
@@ -248,6 +249,14 @@ def _last_market_close(now: dt.datetime) -> dt.datetime:
     return candidate
 
 
+def last_price_date(symbol: str) -> str | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT MAX(date) AS d FROM prices WHERE symbol = ?", (symbol,)
+        ).fetchone()
+    return row["d"] if row and row["d"] else None
+
+
 def needs_refresh(symbol: str) -> bool:
     log = get_last_sync(symbol)
     if not log:
@@ -264,7 +273,14 @@ def needs_refresh(symbol: str) -> bool:
         return fetched < now_ny() - dt.timedelta(days=3)
     if rows < 60:
         return True
-    return fetched < _last_market_close(now_ny())
+    now = now_ny()
+    close = _last_market_close(now)
+    # Si el último cierre esperado no está en la serie, la caché está atrasada.
+    # Se reintenta como máximo cada 6 horas para no martillear la fuente.
+    last = last_price_date(symbol)
+    if last and last < close.date().isoformat():
+        return fetched < now - dt.timedelta(hours=6)
+    return fetched < close
 
 
 def summarize_symbol(symbol: str) -> dict[str, Any] | None:
@@ -306,11 +322,17 @@ def upsert_instruments(rows: Iterable[dict[str, Any]]) -> None:
         conn.executemany(
             "INSERT INTO instruments(symbol, name, sector, industry, country, market_cap, "
             "price, volume, change_pct, kind, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) "
-            "ON CONFLICT(symbol) DO UPDATE SET name=excluded.name, sector=excluded.sector, "
-            "industry=excluded.industry, country=excluded.country, "
-            "market_cap=excluded.market_cap, price=excluded.price, "
-            "volume=excluded.volume, change_pct=excluded.change_pct, "
-            "kind=excluded.kind, updated_at=excluded.updated_at",
+            "ON CONFLICT(symbol) DO UPDATE SET "
+            "name=CASE WHEN excluded.name<>'' THEN excluded.name ELSE instruments.name END, "
+            "sector=CASE WHEN excluded.sector<>'' THEN excluded.sector ELSE instruments.sector END, "
+            "industry=CASE WHEN excluded.industry<>'' THEN excluded.industry ELSE instruments.industry END, "
+            "country=CASE WHEN excluded.country<>'' THEN excluded.country ELSE instruments.country END, "
+            "market_cap=COALESCE(excluded.market_cap, instruments.market_cap), "
+            "price=COALESCE(excluded.price, instruments.price), "
+            "volume=COALESCE(excluded.volume, instruments.volume), "
+            "change_pct=COALESCE(excluded.change_pct, instruments.change_pct), "
+            "kind=CASE WHEN excluded.kind<>'' THEN excluded.kind ELSE instruments.kind END, "
+            "updated_at=excluded.updated_at",
             payload,
         )
 
@@ -408,16 +430,42 @@ def save_screen_run(run: dict[str, Any]) -> None:
                 json.dumps(run.get("regime") or {}),
             ),
         )
+        # Conserva el último resultado completado de cada universo y, además,
+        # los más recientes. Así un escaneo manual no expulsa el diario.
+        rows = conn.execute(
+            "SELECT id, universe, status FROM screen_runs ORDER BY created_at DESC"
+        ).fetchall()
+        keep = set()
+        latest_by_universe = set()
+        for row in rows:
+            if row["status"] == "done" and row["universe"] not in latest_by_universe:
+                latest_by_universe.add(row["universe"])
+                keep.add(row["id"])
+        for row in rows:
+            if len(keep) >= 12:
+                break
+            keep.add(row["id"])
+        if keep:
+            placeholders = ",".join("?" for _ in keep)
+            conn.execute(
+                f"DELETE FROM screen_runs WHERE id NOT IN ({placeholders})",
+                tuple(keep),
+            )
+
+
+def mark_screen_run_interrupted(run_id: str, finished_at: str) -> None:
+    with _write_lock, _connect() as conn:
         conn.execute(
-            "DELETE FROM screen_runs WHERE id NOT IN "
-            "(SELECT id FROM screen_runs ORDER BY created_at DESC LIMIT 8)"
+            "UPDATE screen_runs SET status = 'interrupted', finished_at = ? "
+            "WHERE id = ? AND status = 'running'",
+            (finished_at, run_id),
         )
 
 
 def load_screen_runs() -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM screen_runs ORDER BY created_at DESC LIMIT 8"
+            "SELECT * FROM screen_runs ORDER BY created_at DESC LIMIT 20"
         ).fetchall()
     result = []
     for row in rows:
@@ -523,7 +571,7 @@ def get_cached_score(symbol: str) -> dict[str, Any] | None:
 
 def get_cached_scores(symbols: list[str]) -> dict[str, dict[str, Any]]:
     """Devuelve la última fila cacheada por símbolo (consulta por lotes)."""
-    unique = [s.upper() for s in dict.fromkeys(symbols) if s]
+    unique = [str(s).upper() for s in dict.fromkeys(symbols) if s]
     if not unique:
         return {}
     out: dict[str, dict[str, Any]] = {}
@@ -539,6 +587,8 @@ def get_cached_scores(symbols: list[str]) -> dict[str, dict[str, Any]]:
                 try:
                     payload = json.loads(row["payload"])
                 except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict):
                     continue
                 payload.setdefault("as_of", row["as_of"])
                 out[row["symbol"].upper()] = payload
@@ -579,6 +629,40 @@ def get_fundamentals(symbol: str) -> dict[str, Any] | None:
         return None
     payload["cached_at"] = row["fetched_at"]
     return payload
+
+
+def get_fundamentals_fields(symbols: list[str]) -> dict[str, dict[str, Any]]:
+    """Campos de contexto fundamental por símbolo, sin cargar el payload completo."""
+    unique = [str(s).upper() for s in dict.fromkeys(symbols) if s]
+    if not unique:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    with _connect() as conn:
+        for start in range(0, len(unique), 400):
+            chunk = unique[start : start + 400]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = conn.execute(
+                f"""
+                SELECT symbol, fetched_at,
+                       json_extract(payload, '$.quality.score') AS quality,
+                       json_extract(payload, '$.quality.label') AS quality_label,
+                       json_extract(payload, '$.annual.revenue_growth') AS revenue_growth,
+                       json_extract(payload, '$.surprises[0].surprise_pct') AS eps_surprise,
+                       json_extract(payload, '$.next_earnings.days') AS days_to_earnings,
+                       json_extract(payload, '$.next_earnings.date') AS next_earnings,
+                       json_extract(payload, '$.analyst.upside') AS analyst_upside,
+                       json_extract(payload, '$.company.pe') AS pe
+                FROM fundamentals
+                WHERE symbol IN ({placeholders})
+                  AND json_valid(payload)
+                  AND json_type(payload, '$.quarters') = 'array'
+                  AND json_array_length(payload, '$.quarters') > 0
+                """,
+                chunk,
+            ).fetchall()
+            for row in rows:
+                out[row["symbol"].upper()] = dict(row)
+    return out
 
 
 def fundamentals_age(symbol: str) -> float | None:
@@ -779,15 +863,27 @@ def import_user_data(payload: dict[str, Any]) -> dict[str, int]:
             symbol = str(item.get("symbol") or "").strip().upper()
             shares = float(item.get("shares") or 0)
             entry = float(item.get("entry_price") or 0)
-            if not symbol or shares <= 0 or entry <= 0:
+            stop = float(item["stop"]) if item.get("stop") else None
+            target = float(item["target"]) if item.get("target") else None
+            if (
+                not symbol
+                or not math.isfinite(shares)
+                or not math.isfinite(entry)
+                or shares <= 0
+                or entry <= 0
+            ):
+                continue
+            if stop is not None and (not math.isfinite(stop) or stop <= 0):
+                continue
+            if target is not None and (not math.isfinite(target) or target <= 0):
                 continue
             add_position(
                 symbol,
                 shares,
                 entry,
                 item.get("entry_date"),
-                float(item["stop"]) if item.get("stop") else None,
-                float(item["target"]) if item.get("target") else None,
+                stop,
+                target,
                 item.get("note") or "",
             )
             added_positions += 1
@@ -800,6 +896,8 @@ def import_user_data(payload: dict[str, Any]) -> dict[str, int]:
             threshold = float(item["threshold"]) if item.get("threshold") is not None else None
             label = item.get("label")
             if not symbol or not kind:
+                continue
+            if threshold is not None and (not math.isfinite(threshold) or threshold <= 0):
                 continue
             if has_alert(symbol, kind, threshold):
                 continue

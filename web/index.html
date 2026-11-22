@@ -69,6 +69,7 @@
       </div>
     </div>
 
+    <h2 class="sr-only">Resultados del screener</h2>
     <div class="panel controls">
       <div class="field">
         <label for="universe">Universo</label>
@@ -236,6 +237,7 @@
       </div>
     </div>
 
+    <h2 class="sr-only">Ficha del valor</h2>
     <div class="quick-chips" id="quickChips">
       <button class="chip" data-symbol="AAPL">AAPL</button>
       <button class="chip" data-symbol="MSFT">MSFT</button>
@@ -330,7 +332,7 @@
             </div>
           </div>
           <div class="chart-canvas-wrap">
-            <canvas id="priceChart"></canvas>
+            <canvas id="priceChart" role="img" aria-label="Gráfico de precio con medias móviles y volumen"></canvas>
             <div class="chart-tooltip hidden" id="chartTooltip"></div>
           </div>
         </div>
@@ -407,7 +409,7 @@
         </div>
         <div class="compare-legend" id="compareLegend"></div>
         <div class="chart-canvas-wrap" style="height:300px">
-          <canvas id="compareChart"></canvas>
+          <canvas id="compareChart" role="img" aria-label="Comparación de rentabilidad de varios valores"></canvas>
         </div>
         <div class="table-wrap" style="margin-top:10px">
           <table class="data-table" id="compareTable">
@@ -507,6 +509,7 @@
     <div class="error-box hidden" id="btError"></div>
 
     <div class="hidden" id="btContent">
+      <h2 class="sr-only">Resultados de la validación</h2>
       <div class="metric-grid" id="btKpis"></div>
 
       <div class="muted small" id="btMetaResults" style="margin:8px 2px 0"></div>
@@ -532,7 +535,7 @@
             </div>
             <span class="muted small" id="btCoverage"></span>
           </div>
-          <div class="chart-canvas-wrap" style="height:300px"><canvas id="btChart"></canvas></div>
+          <div class="chart-canvas-wrap" style="height:300px"><canvas id="btChart" role="img" aria-label="Curva de capital del backtest frente a QQQ"></canvas></div>
         </div>
       </details>
 
@@ -607,9 +610,10 @@
       </div>
     </div>
 
+    <h2 class="sr-only">Detalle de la cartera y las alertas</h2>
     <div class="metric-grid" id="pfTotals"></div>
     <div class="metric-grid hidden" id="pfTotalsExtra"></div>
-    <button class="btn ghost" id="pfMore" style="margin:8px 0 10px">Más métricas</button>
+    <button class="btn ghost hidden" id="pfMore" style="margin:8px 0 10px">Más métricas</button>
 
     <div class="subtabs" id="portfolioTabs">
       <button class="subtab is-active" data-ptab="positions">Posiciones</button>

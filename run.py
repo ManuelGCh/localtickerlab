@@ -168,6 +168,42 @@ def run_scan_once(args, screener, fundamentals, data) -> int:
             )
         print()
 
+        # El NASDAQ-100 es el universo por defecto: no lo dejamos a medias.
+        if args.universe == "all":
+            ndx_symbols = store.get_universe("ndx")
+            if not ndx_symbols:
+                try:
+                    ndx_symbols = [row["symbol"] for row in screener.universes.get("ndx")]
+                except Exception:  # noqa: BLE001 - el enriquecimiento NDX es opcional
+                    ndx_symbols = []
+            ndx = {symbol.upper() for symbol in ndx_symbols}
+            if ndx:
+                job.start_enrichment(fundamentals, len(ndx), symbols=ndx)
+                if job.enrich_total:
+                    print(f"Completando fundamentales de {job.enrich_total} valores del NASDAQ-100…")
+                    scanstatus.write(
+                        phase="enriquecimiento",
+                        done=0,
+                        total=job.enrich_total,
+                        errors=0,
+                        message="Completando fundamentales del NASDAQ-100",
+                    )
+                    while job.enrich_status == "running":
+                        time.sleep(2)
+                        scanstatus.write(
+                            phase="enriquecimiento",
+                            done=job.enrich_done,
+                            total=job.enrich_total,
+                            errors=job.enrich_errors,
+                            message="Completando fundamentales del NASDAQ-100",
+                        )
+                        print(
+                            f"\r  {job.enrich_done}/{job.enrich_total} NDX enriquecidos",
+                            end="",
+                            flush=True,
+                        )
+                    print()
+
     counts = {}
     for row in job.rows:
         counts[row.get("action")] = counts.get(row.get("action"), 0) + 1

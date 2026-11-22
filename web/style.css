@@ -966,3 +966,15 @@ details.diag > .diag-body { padding: 0 20px 18px; }
   .bt-panel .data-table th:first-child,
   .bt-panel .data-table td:first-child { white-space: normal; }
 }
+
+/* Los paneles del backtest deben poder encogerse dentro del grid */
+.bt-grid > * { min-width: 0; }
+
+/* Encabezado accesible sin impacto visual */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* Las tarjetas de posiciones no son navegables como las del screener */
+#pfCards .stock-card { cursor: default; }

@@ -27,6 +27,9 @@ class DataService:
         self._guard = threading.Lock()
         self._failed_until: dict[str, float] = {}
 
+    def clear_failed(self) -> None:
+        self._failed_until.clear()
+
     def _lock_for(self, symbol: str) -> threading.Lock:
         with self._guard:
             lock = self._locks.get(symbol)
@@ -448,7 +451,12 @@ class ScreenJob:
                 "errors": self.enrich_errors,
             }
 
-    def start_enrichment(self, fundamentals: Any, limit: int = 300) -> dict[str, Any]:
+    def start_enrichment(
+        self,
+        fundamentals: Any,
+        limit: int = 300,
+        symbols: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
         with self._lock:
             if self.enrich_status == "running":
                 return {
@@ -457,11 +465,23 @@ class ScreenJob:
                     "done": self.enrich_done,
                     "errors": self.enrich_errors,
                 }
-            candidates = [
+            wanted = {s.upper() for s in symbols} if symbols is not None else None
+            rows = [
                 row
                 for row in self.rows
-                if not row.get("enriched") and row.get("quality") is None
-            ][: max(1, limit)]
+                if wanted is None or (row.get("symbol") or "").upper() in wanted
+            ]
+            known = store.get_fundamentals_fields([row.get("symbol") or "" for row in rows])
+            missing = []
+            present = []
+            for row in rows:
+                fund = known.get((row.get("symbol") or "").upper())
+                if fund is None or fund.get("quality") is None:
+                    missing.append(row)
+                else:
+                    present.append(row)
+            # Primero rellena huecos; después refresca los mejores por puntuación.
+            candidates = (missing + present)[: max(1, limit)]
             self.enrich_status = "running"
             self.enrich_total = len(candidates)
             self.enrich_done = 0
@@ -550,6 +570,12 @@ class ScreenerService:
 
     def _restore(self) -> None:
         for run in store.load_screen_runs():
+            if run.get("status") == "running":
+                # Un proceso anterior se cerró a mitad: no dejarlo "running" para siempre.
+                stamp = store.now_ny().isoformat(timespec="seconds")
+                store.mark_screen_run_interrupted(run["id"], stamp)
+                run["status"] = "interrupted"
+                run["finished_at"] = run.get("finished_at") or stamp
             self._restored[run["id"]] = run
             if run.get("status") in ("done", "cancelled") and run["universe"] not in self._latest:
                 self._latest[run["universe"]] = run["id"]
@@ -558,20 +584,75 @@ class ScreenerService:
         """Superpone la última caché por símbolo a una foto de escaneo antigua."""
         if not rows:
             return rows
-        cached = store.get_cached_scores([row.get("symbol") or "" for row in rows])
+        symbols = [row.get("symbol") or "" for row in rows]
+        cached = store.get_cached_scores(symbols)
+        fundamentals = store.get_fundamentals_fields(symbols)
         out: list[dict[str, Any]] = []
         for row in rows:
-            fresh = cached.get((row.get("symbol") or "").upper())
+            symbol = (row.get("symbol") or "").upper()
+            fresh = cached.get(symbol)
             current_as_of = row.get("as_of") or ""
             fresh_as_of = (fresh or {}).get("as_of") or ""
+            merged = dict(row)
             if fresh and fresh_as_of >= current_as_of:
-                merged = dict(row)
                 merged.update(fresh)
                 merged["symbol"] = row.get("symbol") or fresh.get("symbol")
-                out.append(merged)
+            fund = fundamentals.get(symbol)
+            if fund:
+                for key in (
+                    "quality",
+                    "quality_label",
+                    "revenue_growth",
+                    "eps_surprise",
+                    "days_to_earnings",
+                    "next_earnings",
+                    "analyst_upside",
+                    "pe",
+                ):
+                    merged[key] = fund.get(key)
+                merged["enriched"] = True
+                merged["fundamentals_error"] = False
             else:
-                out.append(row)
+                # Sin ficha fundamental no mostramos una calidad duplicada y antigua.
+                for key in (
+                    "quality",
+                    "quality_label",
+                    "revenue_growth",
+                    "eps_surprise",
+                    "days_to_earnings",
+                    "next_earnings",
+                    "analyst_upside",
+                    "pe",
+                ):
+                    merged[key] = None
+                merged["enriched"] = False
+                merged["fundamentals_error"] = False
+            out.append(merged)
         return out
+
+    def latest_meta(self, universe: str) -> dict[str, Any] | None:
+        run_id = self._latest.get(universe)
+        if not run_id:
+            return None
+        job = self.jobs.get(run_id)
+        if job:
+            return {
+                "id": job.id,
+                "status": job.status,
+                "finished_at": job.finished_at,
+                "done": job.done,
+                "total": job.total,
+            }
+        run = self._restored.get(run_id)
+        if not run:
+            return None
+        return {
+            "id": run["id"],
+            "status": run["status"],
+            "finished_at": run.get("finished_at"),
+            "done": run.get("done"),
+            "total": run.get("total"),
+        }
 
     def latest(self, universe: str) -> dict[str, Any] | None:
         run_id = self._latest.get(universe)

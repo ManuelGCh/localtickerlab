@@ -38,7 +38,7 @@
     pctRaw: (v, digits = 2) => (v == null ? "—" : v.toFixed(digits) + "%"),
     money: (v) => {
       if (v == null) return "—";
-      return "$" + compact.format(v);
+      return (v < 0 ? "-$" : "$") + compact.format(Math.abs(v));
     },
     volume: (v) => (v == null ? "—" : compact.format(v)),
     date: (iso) => {
@@ -48,10 +48,25 @@
     },
   };
 
+  function storedArray(key, fallback) {
+    const value = store.get(key, fallback);
+    return Array.isArray(value) ? value : fallback;
+  }
+
+  const DEFAULT_HIDDEN_COLS = [
+    "revenue_growth",
+    "eps_surprise",
+    "days_to_earnings",
+    "trend",
+    "momentum",
+    "vol_60d",
+    "max_drawdown",
+  ];
+
   const state = {
     tab: "screen",
     universe: store.get("sl.universe", "ndx"),
-    watchlist: store.get("sl.watchlist", []),
+    watchlist: storedArray("sl.watchlist", []).filter((s) => typeof s === "string"),
     rows: [],
     sort: { key: "score", dir: -1 },
     sortTouched: false,
@@ -61,24 +76,26 @@
     searchTotal: 0,
     searching: false,
     searchToken: 0,
-    minScore: 0,
     signal: "",
     qualityMin: 0,
     noEarnings: false,
     enrichRunning: false,
     regime: {},
-    hiddenCols: store.get("sl.hiddenCols.v3", [
-      "revenue_growth", "eps_surprise", "days_to_earnings", "trend",
-      "momentum", "vol_60d", "max_drawdown",
-    ]),
-    views: store.get("sl.views", []),
+    hiddenCols: storedArray("sl.hiddenCols.v3", [...DEFAULT_HIDDEN_COLS]).filter(
+      (s) => typeof s === "string"
+    ),
+    views: storedArray("sl.views", []).filter((v) => v && typeof v === "object"),
     capital: store.get("sl.capital", 10000),
     riskPct: store.get("sl.riskPct", 1),
     jobId: null,
     screenTotal: 0,
     screenCounts: {},
     loadedAll: false,
+    screenDirty: false,
+    latestToken: 0,
     pollTimer: null,
+    hideProgressTimer: null,
+    hideBtTimer: null,
     current: null,
     chart: null,
     chartRange: 126,
@@ -88,6 +105,9 @@
     watchRows: {},
     loadingWatch: false,
     btJobId: null,
+    screenPollErrors: 0,
+    btPollErrors: 0,
+    enrichPollErrors: 0,
     btTimer: null,
     btChart: null,
     btResult: null,
@@ -159,13 +179,18 @@
     if (!raw) return {};
     const [tab, query] = raw.split("?");
     const params = new URLSearchParams(query || "");
+    const atabs = ["resumen", "resultados", "noticias", "metricas", "comparar"];
+    const ptabs = ["positions", "watch", "alerts", "system"];
+    const atab = params.get("atab") || "";
+    const ptab = params.get("ptab") || "";
+    const signal = params.get("signal") || "";
     return {
       tab: ["screen", "analyze", "backtest", "portfolio"].includes(tab) ? tab : "screen",
       universe: params.get("universe") || "",
-      signal: params.get("signal") || "",
+      signal: SIGNALS.includes(signal) ? signal : "",
       symbol: (params.get("symbol") || "").toUpperCase() || "",
-      atab: params.get("atab") || "",
-      ptab: params.get("ptab") || "",
+      atab: atabs.includes(atab) ? atab : "",
+      ptab: ptabs.includes(ptab) ? ptab : "",
     };
   }
 
@@ -182,9 +207,10 @@
     refreshWatchBadge();
     updateScanNote();
     const initial = parseHash();
-    if (initial.universe) {
+    if (["ndx", "all", "watchlist"].includes(initial.universe)) {
       $("#universe").value = initial.universe;
       state.universe = initial.universe;
+      store.set("sl.universe", initial.universe);
     }
     if (initial.signal) {
       $("#signalFilter").value = initial.signal;
@@ -192,13 +218,21 @@
     }
     setTab(initial.tab || "screen");
     if (initial.atab) setAnalyzeTab(initial.atab);
+    if (initial.atab === "comparar" && !initial.symbol) {
+      $("#analyzeEmpty").classList.add("hidden");
+      $("#analyzeContent").classList.remove("hidden");
+      $("#analyzeContent").classList.add("compare-only");
+      $("#compareBack").classList.remove("hidden");
+    }
     if (initial.ptab) setPortfolioTab(initial.ptab);
     if (initial.symbol) {
       $("#symbolSearch").value = initial.symbol;
       analyze(initial.symbol);
-    } else {
-      loadLatest(undefined, true);
     }
+    loadLatest(
+      undefined,
+      !initial.symbol && (initial.tab || "screen") === "screen"
+    );
     refreshScanStatus();
     window.setInterval(refreshScanStatus, 3000);
     window.addEventListener("hashchange", () => {
@@ -208,6 +242,19 @@
         analyze(initial.symbol);
         return;
       }
+      if (
+        ["ndx", "all", "watchlist"].includes(initial.universe) &&
+        initial.universe !== state.universe
+      ) {
+        state.universe = initial.universe;
+        $("#universe").value = initial.universe;
+        store.set("sl.universe", initial.universe);
+        state.loadedAll = false;
+        updateScanNote();
+        loadLatest(initial.universe);
+      }
+      if (initial.atab && initial.atab !== state.analyzeTab) setAnalyzeTab(initial.atab);
+      if (initial.ptab && initial.ptab !== state.portfolioTab) setPortfolioTab(initial.ptab);
       if (initial.tab && initial.tab !== state.tab) setTab(initial.tab);
     });
     state.initializing = false;
@@ -252,7 +299,15 @@
       loadPortfolio();
       renderWatchlist();
     }
+    if (tab === "screen") {
+      if (!state.rows.length && !state.jobId) loadLatest(state.universe, false);
+      else if (state.screenDirty) {
+        state.screenDirty = false;
+        renderScreenTable();
+      }
+    }
     if (tab === "backtest" && !state.btResult) loadBacktest();
+    updateHash();
   }
 
   async function refreshScanStatus() {
@@ -307,13 +362,18 @@
     try {
       const data = await api("/api/status");
       const db = data.db || {};
+      const universeRun =
+        state.universe !== "watchlist"
+          ? ((data.universes || {})[state.universe] || {}).last_run
+          : null;
+      const stamp = (universeRun && universeRun.finished_at) || data.last_run;
       let stale = false;
       let label = "Sin datos";
-      if (data.last_run) {
-        const when = new Date(data.last_run);
+      if (stamp) {
+        const when = new Date(stamp);
         stale = Date.now() - when.getTime() > 2 * 86400 * 1000;
         label =
-          "Datos " +
+          "Escaneo " +
           when.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" }) +
           " " +
           when.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
@@ -333,10 +393,14 @@
   /* ================= SCREENER ================= */
   function restoreUniverse() {
     const select = $("#universe");
-    if (store.get("sl.universe", "ndx") === "all") {
-      select.value = "all";
-      $("#maxSymbols").value = "600";
-    }
+    const allowed = ["ndx", "all", "watchlist"];
+    let stored = store.get("sl.universe", "ndx");
+    if (typeof stored !== "string" || !allowed.includes(stored)) stored = "ndx";
+    select.value = stored;
+    state.universe = stored;
+    store.set("sl.universe", stored);
+    if (stored === "all") $("#maxSymbols").value = "600";
+    if (stored === "watchlist") $("#maxSymbols").value = "0";
     select.addEventListener("change", () => {
       state.universe = select.value;
       store.set("sl.universe", state.universe);
@@ -390,7 +454,7 @@
   }
 
   function saveView() {
-    const name = window.prompt("Nombre de la vista:");
+    const name = (window.prompt("Nombre de la vista:") || "").trim();
     if (!name) return;
     const config = currentViewConfig();
     const existing = state.views.findIndex((view) => view.name === name);
@@ -403,27 +467,39 @@
   function applyView(index) {
     const view = state.views[index];
     if (!view) return;
-    const config = view.config;
-    $("#universe").value = config.universe;
-    state.universe = config.universe;
-    $("#maxSymbols").value = config.maxSymbols;
-    $("#minPrice").value = config.minPrice;
-    $("#minCap").value = config.minCap;
-    $("#excludeFunds").checked = !!config.excludeFunds;
-    $("#signalFilter").value = config.signal || "";
-    state.signal = config.signal || "";
-    $("#qualityFilter").value = config.qualityMin || "";
-    state.qualityMin = Number(config.qualityMin) || 0;
+    const config = view.config || {};
+    const universe = ["ndx", "all", "watchlist"].includes(config.universe)
+      ? config.universe
+      : "ndx";
+    $("#universe").value = universe;
+    state.universe = universe;
+    $("#maxSymbols").value = config.maxSymbols ?? "600";
+    $("#minPrice").value = config.minPrice ?? "3";
+    $("#minCap").value = config.minCap ?? "300000000";
+    $("#excludeFunds").checked = config.excludeFunds !== false;
+    const signal = SIGNALS.includes(config.signal) ? config.signal : "";
+    $("#signalFilter").value = signal;
+    state.signal = signal;
+    const qualityMin = ["", "45", "60", "75"].includes(String(config.qualityMin ?? ""))
+      ? String(config.qualityMin ?? "")
+      : "";
+    $("#qualityFilter").value = qualityMin;
+    state.qualityMin = Number(qualityMin) || 0;
     $("#noEarnings").checked = !!config.noEarnings;
     state.noEarnings = !!config.noEarnings;
-    state.hiddenCols = config.hiddenCols || [];
+    state.hiddenCols = Array.isArray(config.hiddenCols)
+      ? config.hiddenCols.filter((key) => typeof key === "string")
+      : [...DEFAULT_HIDDEN_COLS];
     store.set("sl.hiddenCols.v3", state.hiddenCols);
+    store.set("sl.universe", state.universe);
+    state.loadedAll = false;
     buildColumnPanel();
     applyColumns();
     updateScanNote();
+    updateHash();
     renderScreenTable();
     $("#viewsPanel").classList.add("hidden");
-    loadLatest(config.universe);
+    loadLatest(universe);
   }
 
   function deleteView(index) {
@@ -458,7 +534,7 @@
       });
     });
     panel.querySelector("#resetColumns").addEventListener("click", () => {
-      state.hiddenCols = ["trend", "momentum", "vol_60d", "max_drawdown"];
+      state.hiddenCols = [...DEFAULT_HIDDEN_COLS];
       store.set("sl.hiddenCols.v3", state.hiddenCols);
       buildColumnPanel();
       applyColumns();
@@ -527,7 +603,9 @@
       $("#maxSymbols").value = "0";
       $("#minCap").value = "0";
       $("#minPrice").value = "1";
+      store.set("sl.universe", "all");
       updateScanNote();
+      updateHash();
       const ok = window.confirm(
         "Escaneo completo del NASDAQ Composite (~5.000 valores con precio ≥ 1 $). " +
           "La primera ejecución tarda 15-25 minutos y continúa en el servidor aunque cierres la pestaña. ¿Empezar?"
@@ -618,14 +696,6 @@
       window.location.href = `/api/screen/export?${query}`;
     });
     $("#maxSymbols").addEventListener("change", updateScanNote);
-    $$("#scoreFilter .seg").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        $$("#scoreFilter .seg").forEach((b) => b.classList.remove("is-active"));
-        btn.classList.add("is-active");
-        state.minScore = Number(btn.dataset.min);
-        renderScreenTable();
-      });
-    });
     $$("#screenTable thead th[data-sort]").forEach((th) => {
       th.addEventListener("click", () => {
         const key = th.dataset.sort;
@@ -637,22 +707,78 @@
     });
   }
 
+  async function resumeScreen(token) {
+    const saved = store.get("sl.screenJob", null);
+    if (!saved) return false;
+    try {
+      const job = await api("/api/screen/status", { id: saved });
+      if (token !== state.latestToken) return false;
+      if (job.universe !== state.universe) return false;
+      if (job.status === "running") {
+        state.jobId = job.id;
+        state.universe = job.universe;
+        $("#universe").value = job.universe;
+        state.rows = job.rows || [];
+        state.screenTotal = job.done || job.total || 0;
+        state.screenCounts = job.action_counts || {};
+        state.regime = job.regime || {};
+        showProgress(job);
+        renderScreenTable();
+        pollScreen();
+        return true;
+      }
+      if (job.status === "done" && job.rows && job.rows.length) {
+        state.jobId = job.id;
+        state.universe = job.universe;
+        $("#universe").value = job.universe;
+        state.rows = job.rows;
+        state.screenTotal = job.done || job.rows.length;
+        state.screenCounts = job.action_counts || {};
+        state.regime = job.regime || {};
+        renderScreenTable();
+        store.set("sl.screenJob", null);
+        return true;
+      }
+    } catch (e) {
+      /* trabajo perdido tras reiniciar el servidor */
+    }
+    if (token !== state.latestToken) return false;
+    store.set("sl.screenJob", null);
+    return false;
+  }
+
   async function loadLatest(universeArg, autoStart = false) {
-    const universe =
-      universeArg || (state.universe === "watchlist" ? "ndx" : state.universe);
+    const token = (state.latestToken = (state.latestToken || 0) + 1);
+    if (await resumeScreen(token)) return;
+    if (token !== state.latestToken) return;
+    state.enrichRunning = false;
+    $("#enrichBtn").disabled = false;
+    $("#enrichInfo").textContent = "";
+    $("#runScreen").disabled = false;
+    $("#cancelScreen").classList.add("hidden");
+    $("#progressPanel").classList.add("hidden");
+    const universe = universeArg || state.universe;
     if (universe === "watchlist") {
       state.rows = [];
       state.jobId = null;
       state.screenTotal = 0;
       state.screenCounts = {};
       renderScreenTable();
+      loadStatus();
       return;
     }
     try {
       const latest = await api("/api/screen/latest", { universe });
+      if (token !== state.latestToken) return;
       if (latest && latest.rows && latest.rows.length) {
         $("#universe").value = universe;
         state.universe = universe;
+        const params = latest.params || {};
+        if (params.min_price != null) $("#minPrice").value = params.min_price;
+        if (params.min_market_cap != null) $("#minCap").value = String(params.min_market_cap);
+        if (params.max_symbols != null) $("#maxSymbols").value = String(params.max_symbols);
+        if (params.exclude_funds != null) $("#excludeFunds").checked = !!params.exclude_funds;
+        updateScanNote();
         state.rows = latest.rows;
         state.jobId = latest.id;
         state.search = "";
@@ -663,6 +789,7 @@
         state.screenTotal = latest.done || latest.rows.length;
         state.screenCounts = latest.action_counts || {};
         state.regime = latest.regime || {};
+        $("#progressPanel").classList.add("hidden");
         if (latest.status === "running") {
           state.jobId = latest.id;
           showProgress(latest);
@@ -674,12 +801,14 @@
         state.jobId = null;
         state.screenTotal = 0;
         state.screenCounts = {};
+        $("#progressPanel").classList.add("hidden");
         renderScreenTable();
         if (autoStart && !sessionStorage.getItem("sl.autostart")) {
           sessionStorage.setItem("sl.autostart", "1");
           startScreen(false);
         }
       }
+      loadStatus();
     } catch (e) {
       /* silencioso: el usuario puede lanzarlo a mano */
     }
@@ -709,8 +838,15 @@
     if (universe === "watchlist") params.symbols = state.watchlist.join(",");
 
     $("#runScreen").disabled = true;
+    clearTimeout(state.hideProgressTimer);
+    state.hideProgressTimer = null;
     try {
       const job = await api("/api/screen/start", params);
+      store.set("sl.screenJob", job.id);
+      if (universe !== state.universe) {
+        $("#runScreen").disabled = false;
+        return;
+      }
       state.jobId = job.id;
       state.loadedAll = false;
       state.search = "";
@@ -720,6 +856,7 @@
       state.searching = false;
       state.enrichRunning = false;
       state.regime = {};
+      state.screenPollErrors = 0;
       $("#tableSearch").value = "";
       $("#enrichInfo").textContent = "";
       $("#enrichBtn").disabled = false;
@@ -746,10 +883,14 @@
 
   function pollScreen() {
     if (state.pollTimer) clearTimeout(state.pollTimer);
+    const jobId = state.jobId;
     const tick = async () => {
-      if (!state.jobId) return;
+      if (!jobId || state.jobId !== jobId) return;
       try {
-        const job = await api("/api/screen/status", { id: state.jobId });
+        const job = await api("/api/screen/status", { id: jobId });
+        if (state.jobId !== jobId) return;
+        if (job.universe && job.universe !== state.universe) return;
+        state.screenPollErrors = 0;
         state.rows = job.rows && job.rows.length ? job.rows : state.rows;
         state.screenTotal = job.done || state.screenTotal;
         state.screenCounts = job.action_counts || state.screenCounts;
@@ -759,6 +900,7 @@
         if (job.status === "running") {
           state.pollTimer = setTimeout(tick, 1300);
         } else {
+          store.set("sl.screenJob", null);
           $("#runScreen").disabled = false;
           $("#cancelScreen").classList.add("hidden");
           hideProgressSoon();
@@ -769,6 +911,14 @@
           }
         }
       } catch (e) {
+        state.screenPollErrors += 1;
+        if (state.screenPollErrors >= 5) {
+          store.set("sl.screenJob", null);
+          $("#runScreen").disabled = false;
+          $("#cancelScreen").classList.add("hidden");
+          showScreenError("Se perdió la conexión con el escaneo. Vuelve a lanzarlo.");
+          return;
+        }
         state.pollTimer = setTimeout(tick, 2500);
       }
     };
@@ -776,6 +926,8 @@
   }
 
   function showProgress(job) {
+    clearTimeout(state.hideProgressTimer);
+    state.hideProgressTimer = null;
     const panel = $("#progressPanel");
     panel.classList.remove("hidden");
     $("#cancelScreen").classList.toggle("hidden", job.status !== "running");
@@ -803,7 +955,8 @@
   }
 
   function hideProgressSoon() {
-    setTimeout(() => {
+    clearTimeout(state.hideProgressTimer);
+    state.hideProgressTimer = setTimeout(() => {
       $("#progressPanel").classList.add("hidden");
     }, 6000);
   }
@@ -868,16 +1021,16 @@
       note +
       mobileRows
       .map((row) => {
-        const change = row.change_pct || 0;
-        return `<div class="stock-card" data-card-symbol="${row.symbol}">
+        const change = row.change_pct;
+        return `<div class="stock-card" data-card-symbol="${escapeAttr(row.symbol)}">
           <div class="stock-card-head">
             <div class="stock-card-id">
-              <strong>${row.symbol}</strong>
+              <strong>${escapeHtml(row.symbol)}</strong>
               <span>${escapeHtml(row.name || "")}</span>
             </div>
             <div class="stock-card-price">
               <strong>${fmt.price(row.price)}</strong>
-              <span class="${change >= 0 ? "pos" : "neg"}">${fmt.pct(change)}</span>
+              <span class="${change == null ? "neutral" : change >= 0 ? "pos" : "neg"}">${fmt.pct(change)}</span>
             </div>
           </div>
           <div class="stock-card-tags">
@@ -898,7 +1051,7 @@
   function qualityCell(row) {
     if (row.quality != null) {
       const color = scoreColor(row.quality);
-      return `<span class="qbadge" style="color:${color};background:${color}18;border-color:${color}44">${Math.round(row.quality)}</span>`;
+      return `<span class="qbadge" title="Calidad ${Math.round(row.quality)}/100 (contexto, no puntúa)" style="color:${color};background:${color}18;border-color:${color}44">${Math.round(row.quality)}</span>`;
     }
     return isEnriched(row)
       ? `<span class="muted" title="Sin datos financieros para este valor">s/d</span>`
@@ -942,6 +1095,7 @@
     const limit = Number($("#enrichLimit").value) || 300;
     $("#enrichBtn").disabled = true;
     state.enrichRunning = true;
+    state.enrichPollErrors = 0;
     $("#enrichInfo").textContent = "iniciando…";
     try {
       const job = await api("/api/fundamentals/enrich", { id: state.jobId, limit });
@@ -969,9 +1123,14 @@
   }
 
   function pollEnrichment(wasLoadedAll) {
+    const jobId = state.jobId;
     setTimeout(async () => {
+      if (!jobId || state.jobId !== jobId) return;
       try {
-        const job = await api("/api/screen/status", { id: state.jobId });
+        const job = await api("/api/screen/status", { id: jobId });
+        if (state.jobId !== jobId) return;
+        if (job.universe && job.universe !== state.universe) return;
+        state.enrichPollErrors = 0;
         if (job.rows && job.rows.length) state.rows = job.rows;
         state.screenCounts = job.action_counts || state.screenCounts;
         state.regime = job.regime || state.regime;
@@ -987,8 +1146,14 @@
         if (wasLoadedAll) loadAllRows();
         loadStatus();
       } catch (e) {
-        $("#enrichInfo").textContent = e.message;
-        $("#enrichBtn").disabled = false;
+        state.enrichPollErrors += 1;
+        if (state.enrichPollErrors >= 5) {
+          $("#enrichInfo").textContent = "Se perdió la conexión con el enriquecimiento.";
+          $("#enrichBtn").disabled = false;
+          state.enrichRunning = false;
+          return;
+        }
+        pollEnrichment(wasLoadedAll);
       }
     }, 1500);
   }
@@ -1031,6 +1196,7 @@
   }
 
   function renderScreenTable() {
+    state.screenDirty = false;
     const body = $("#screenBody");
     const empty = $("#screenEmpty");
     const table = $("#screenTable");
@@ -1045,7 +1211,6 @@
         );
       }
     }
-    if (state.minScore) rows = rows.filter((r) => r.score >= state.minScore);
     if (state.signal) rows = rows.filter((r) => r.action === state.signal);
     if (state.qualityMin) {
       rows = rows.filter((r) => r.quality != null && r.quality >= state.qualityMin);
@@ -1095,11 +1260,12 @@
       }
     });
 
-    const asOf = rows.reduce(
-      (latest, row) => (row.as_of && row.as_of > latest ? row.as_of : latest),
-      ""
-    );
-    const asOfText = asOf ? ` · cierre ${fmt.date(asOf)}` : "";
+    const asOfDates = [...new Set(rows.map((row) => row.as_of).filter(Boolean))].sort();
+    const asOfText = asOfDates.length
+      ? ` · cierre ${
+          asOfDates.length === 1 ? fmt.date(asOfDates[0]) : `hasta ${fmt.date(asOfDates[asOfDates.length - 1])}`
+        }`
+      : "";
     if (state.searching) {
       $("#resultsCount").textContent = "buscando en todo el universo…";
     } else if (state.search && state.searchTotal > rows.length) {
@@ -1123,6 +1289,19 @@
     } else if (state.search && !rows.length) {
       emptyTitle.textContent = "Sin coincidencias";
       emptyText.textContent = `No hay valores que coincidan con “${state.searchRaw}” entre los ${nf0.format(state.screenTotal)} analizados.`;
+    } else if (state.rows.length && !rows.length) {
+      emptyTitle.textContent = "Sin resultados con estos filtros";
+      emptyText.textContent =
+        "Prueba a quitar el filtro de señal, el de calidad o el de resultados próximos.";
+    } else if (state.universe === "watchlist" && state.watchlist.length) {
+      emptyTitle.textContent = "Watchlist pendiente de analizar";
+      emptyText.textContent = `Pulsa Analizar para escanear ${state.watchlist.length} ${
+        state.watchlist.length === 1 ? "valor" : "valores"
+      } de tu seguimiento.`;
+    } else if (state.universe === "watchlist") {
+      emptyTitle.textContent = "Tu watchlist está vacía";
+      emptyText.textContent =
+        "Abre un valor en Análisis y pulsa «☆ Watchlist» para seguirlo aquí.";
     } else {
       emptyTitle.textContent = "Aún no hay resultados";
       emptyText.textContent =
@@ -1136,12 +1315,13 @@
     body.innerHTML = rows
       .map((r, i) => {
         const sub = r.subscores || {};
-        const chgClass = (r.change_pct || 0) >= 0 ? "pos" : "neg";
-        return `<tr data-symbol="${r.symbol}">
+        const chgClass =
+          r.change_pct == null ? "neutral" : r.change_pct >= 0 ? "pos" : "neg";
+        return `<tr data-symbol="${escapeAttr(r.symbol)}">
           <td class="col-rank"><span class="rank-badge ${i < 3 ? "top" : ""}">${i + 1}</span></td>
           <td>
-            <div class="sym-cell" data-action="analyze" data-symbol="${r.symbol}">
-              <strong>${r.symbol}</strong>
+            <div class="sym-cell" data-action="analyze" data-symbol="${escapeAttr(r.symbol)}">
+              <strong>${escapeHtml(r.symbol)}</strong>
               <span title="${escapeAttr(r.name || "")}">${escapeHtml(r.name || r.sector || "")}</span>
             </div>
           </td>
@@ -1238,6 +1418,7 @@
       $("#analyzeContent").classList.remove("compare-only");
       $("#analyzeEmpty").classList.remove("hidden");
       $("#compareBack").classList.add("hidden");
+      setAnalyzeTab("resumen");
     });
     $("#compareInput").addEventListener("keydown", (event) => {
       if (event.key === "Enter") compareStocks();
@@ -1389,8 +1570,8 @@
       }
       box.innerHTML = data.items
         .map(
-          (item) => `<div class="suggestion" data-symbol="${item.symbol}">
-            <strong>${item.symbol}</strong>
+          (item) => `<div class="suggestion" data-symbol="${escapeAttr(item.symbol)}">
+            <strong>${escapeHtml(item.symbol)}</strong>
             <span>${escapeHtml(item.name || "")}</span>
           </div>`
         )
@@ -1602,9 +1783,14 @@
     }
   }
 
+  function safeHref(url) {
+    const raw = String(url || "").trim();
+    return /^https?:\/\//i.test(raw) ? escapeAttr(raw) : "#";
+  }
+
   function renderNews(data) {
     const sentiment = data.sentiment || {};
-    const score = sentiment.score || 50;
+    const score = sentiment.score == null ? 50 : sentiment.score;
     const label = sentiment.label || "Neutro";
     const pill = $("#newsSentiment");
     pill.textContent = label;
@@ -1629,7 +1815,7 @@
         (item) => `<div class="news-item">
           ${dot(item.sentiment)}
           <div>
-            <a class="news-title" href="${escapeAttr(item.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanTitle(item))}</a>
+            <a class="news-title" href="${safeHref(item.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanTitle(item))}</a>
             <div class="news-meta">
               ${item.source ? `<span>${escapeHtml(item.source)}</span>` : ""}
               ${item.published ? `<span>${fmt.date(item.published)}</span>` : ""}
@@ -1665,19 +1851,20 @@
     if (score == null) return;
     chips.insertAdjacentHTML(
       "beforeend",
-      `<span class="tag" data-quality="1">Calidad ${Math.round(score)}/100</span>`
+      `<span class="tag" data-quality="1" title="Contexto fundamental; no entra en la puntuación ni en la señal">Calidad ${Math.round(score)}/100</span>`
     );
   }
 
   function renderFundamentals(d) {
     state.fundamentals = d;
     const q = d.quality || {};
-    const score = q.score || 0;
+    const hasScore = q.score != null;
+    const score = hasScore ? q.score : 0;
     $("#fundamentalsLoading").classList.add("hidden");
     $("#fundamentalsBody").classList.remove("hidden");
 
-    $("#fScore").textContent = Math.round(score);
-    $("#fLabel").textContent = q.label || "";
+    $("#fScore").textContent = hasScore ? Math.round(score) : "—";
+    $("#fLabel").textContent = hasScore ? q.label || "" : "Sin datos suficientes";
 
     const subs = q.subscores || {};
     $("#fSubscores").innerHTML = Object.keys(QUALITY_LABELS)
@@ -1692,7 +1879,9 @@
       .join("");
 
     const company = d.company || {};
-    $("#fLabel").textContent = `${q.label || ""}${company.pe ? ` · PER ${company.pe.toFixed(1)}` : ""}`;
+    $("#fLabel").textContent = `${hasScore ? q.label || "" : "Sin datos suficientes"}${
+      company.pe ? ` · PER ${company.pe.toFixed(1)}` : ""
+    }`;
 
     const ne = d.next_earnings || {};
     let earnings = `<div class="fund-k">Próximos resultados</div>`;
@@ -1700,10 +1889,10 @@
       const days = ne.days;
       const when = days === 0 ? "hoy" : days === 1 ? "mañana" : `en ${days} días`;
       const time = ne.time ? ne.time.replace("time-", "").replace("-", " ") : "";
-      earnings += `<div class="fund-v">${fmt.date(ne.date)}</div><div class="fund-s">${when}${time ? ` · ${time}` : ""}</div>`;
+      earnings += `<div class="fund-v">${escapeHtml(fmt.date(ne.date))}</div><div class="fund-s">${when}${time ? ` · ${escapeHtml(time)}` : ""}</div>`;
       earnings += `<span class="fund-flag ${days <= 7 ? "" : "ok"}">${days <= 7 ? "Evento próximo" : "Fecha confirmada"}</span>`;
     } else {
-      earnings += `<div class="fund-v">${ne.fiscal_period || "—"}</div><div class="fund-s">Fecha sin confirmar</div>`;
+      earnings += `<div class="fund-v">${escapeHtml(ne.fiscal_period || "—")}</div><div class="fund-s">Fecha sin confirmar</div>`;
     }
     if (ne.eps_consensus != null) {
       earnings += `<div class="fund-s" style="margin-top:8px">Consenso EPS: <b>${ne.eps_consensus.toFixed(2)} $</b></div>`;
@@ -1716,14 +1905,14 @@
     $("#fAnalystBlock").innerHTML = `
       <div class="fund-k">Analistas${analyst.count ? ` (${analyst.count})` : ""}</div>
       <div class="fund-v">${analyst.target != null ? "$" + fmt.price(analyst.target) : "—"}</div>
-      <div class="fund-s">${upside != null ? fmt.pct(upside, 1) + " potencial" : "Sin objetivo"} · ${analyst.rating || "—"}${dividend}</div>`;
+      <div class="fund-s">${upside != null ? fmt.pct(upside, 1) + " potencial" : "Sin objetivo"} · ${escapeHtml(analyst.rating || "—")}${dividend}</div>`;
     $("#fEarningsBlock").innerHTML = earnings;
 
     $("#fQuarters tbody").innerHTML = (d.quarters || [])
       .slice(0, 6)
       .map(
         (row) => `<tr>
-          <td>${quarterLabel(row.period)}</td>
+          <td>${escapeHtml(quarterLabel(row.period))}</td>
           <td class="num">${fmt.money(row.revenue)}</td>
           <td class="num">${row.gross_margin != null ? fmt.pctRaw(row.gross_margin * 100, 1) : "—"}</td>
           <td class="num">${row.net_margin != null ? fmt.pctRaw(row.net_margin * 100, 1) : "—"}</td>
@@ -1752,6 +1941,36 @@
       " La calidad es contexto: no entra en la puntuación ni en la señal.";
 
     appendQualityChip();
+    syncRowFromFundamentals(d);
+  }
+
+  function syncRowFromFundamentals(d) {
+    if (!d || !d.symbol) return;
+    const row =
+      state.rows.find((item) => item.symbol === d.symbol) ||
+      (state.searchResults || []).find((item) => item.symbol === d.symbol);
+    if (!row) return;
+    const quality = d.quality || {};
+    const annual = d.annual || {};
+    const surprise = (d.surprises || [])[0] || {};
+    const earnings = d.next_earnings || {};
+    const analyst = d.analyst || {};
+    const company = d.company || {};
+    row.quality = quality.score ?? null;
+    row.quality_label = quality.label ?? null;
+    row.revenue_growth = annual.revenue_growth ?? null;
+    row.eps_surprise = surprise.surprise_pct ?? null;
+    row.days_to_earnings = earnings.days ?? null;
+    row.next_earnings = earnings.date ?? null;
+    row.analyst_upside = analyst.upside ?? null;
+    row.pe = company.pe ?? null;
+    row.enriched = true;
+    if (state.tab === "screen") {
+      state.screenDirty = false;
+      renderScreenTable();
+    } else {
+      state.screenDirty = true;
+    }
   }
 
   function renderMetrics(m, ev) {
@@ -1839,6 +2058,9 @@
       $("#universe").value = "watchlist";
       state.universe = "watchlist";
       $("#maxSymbols").value = "0";
+      store.set("sl.universe", "watchlist");
+      updateHash();
+      updateScanNote();
       startScreen(false);
     });
   }
@@ -1882,12 +2104,12 @@
       .map((sym) => {
         const r = state.watchRows[sym];
         if (!r) {
-          return `<tr><td><strong>${sym}</strong></td><td colspan="8" class="muted">cargando…</td><td></td></tr>`;
+          return `<tr><td><strong>${escapeHtml(sym)}</strong></td><td colspan="8" class="muted">cargando…</td><td></td></tr>`;
         }
         const m = r.metrics || {};
         const sc = (r.scores || {}).composite || 0;
         return `<tr>
-          <td><div class="sym-cell" data-action="analyze" data-symbol="${sym}"><strong>${sym}</strong><span>${escapeHtml(r.name || "")}</span></div></td>
+          <td><div class="sym-cell" data-action="analyze" data-symbol="${escapeAttr(sym)}"><strong>${escapeHtml(sym)}</strong><span>${escapeHtml(r.name || "")}</span></div></td>
           <td class="num">${fmt.price(m.price)}</td>
           <td class="num ${(m.change_pct || 0) >= 0 ? "pos" : "neg"}">${fmt.pct(m.change_pct)}</td>
           <td class="num">${actionBadge((r.evaluation || {}).action)}</td>
@@ -1896,7 +2118,7 @@
           <td class="num ${(m.ret_3m || 0) >= 0 ? "pos" : "neg"}">${fmt.pct(m.ret_3m, 1)}</td>
           <td class="num">${m.rsi != null ? m.rsi.toFixed(0) : "—"}</td>
           <td class="num">${fmt.pctRaw(m.vol_60d == null ? null : m.vol_60d * 100, 0)}</td>
-          <td class="col-actions"><button class="icon-btn starred" data-action="unstar" data-symbol="${sym}">★</button></td>
+          <td class="col-actions"><button class="icon-btn starred" data-action="unstar" data-symbol="${escapeAttr(sym)}">★</button></td>
         </tr>`;
       })
       .join("");
@@ -2117,7 +2339,14 @@
     const extraBox = $("#pfTotalsExtra");
     if (extraBox) extraBox.innerHTML = cards.slice(4).join("");
     const moreBtn = $("#pfMore");
-    if (moreBtn) moreBtn.classList.toggle("hidden", cards.length <= 4);
+    if (moreBtn) {
+      const hasExtra = cards.length > 4;
+      moreBtn.classList.toggle("hidden", !hasExtra);
+      if (!hasExtra) {
+        extraBox.classList.add("hidden");
+        moreBtn.textContent = "Más métricas";
+      }
+    }
 
     const positions = data.positions || [];
     $("#pfEmpty").classList.toggle("hidden", positions.length > 0);
@@ -2239,7 +2468,11 @@
       })
       .join("");
     $("#pfCorrWrap").innerHTML = `<table class="data-table corr-table"><thead>${header}</thead><tbody>${body}</tbody></table>`;
-    $("#pfCorrNote").textContent = `Correlación media ${risk.avg_correlation != null ? risk.avg_correlation.toFixed(2) : "—"} · diversificación ${risk.diversification || "—"}`;
+    $("#pfCorrNote").textContent = `Correlación media ${
+      risk.avg_correlation != null ? risk.avg_correlation.toFixed(2) : "—"
+    } · diversificación ${risk.diversification || "—"}${
+      risk.limited ? " · riesgo calculado sobre el top 10 por valor" : ""
+    }`;
   }
 
   function renderAlerts(data) {
@@ -2306,8 +2539,12 @@
 
   async function deletePosition(id) {
     if (!window.confirm("¿Eliminar esta posición?")) return;
-    await api("/api/portfolio/delete", { id });
-    loadPortfolio();
+    try {
+      await api("/api/portfolio/delete", { id });
+      loadPortfolio();
+    } catch (e) {
+      window.alert(e.message);
+    }
   }
 
   async function addAlert() {
@@ -2334,14 +2571,22 @@
   }
 
   async function deleteAlert(id) {
-    await api("/api/alerts/delete", { id });
-    loadPortfolio();
-    refreshAlertBadge();
+    try {
+      await api("/api/alerts/delete", { id });
+      loadPortfolio();
+      refreshAlertBadge();
+    } catch (e) {
+      window.alert(e.message);
+    }
   }
 
   async function toggleAlert(id, active) {
-    await api("/api/alerts/toggle", { id, active: active ? 0 : 1 });
-    loadPortfolio();
+    try {
+      await api("/api/alerts/toggle", { id, active: active ? 0 : 1 });
+      loadPortfolio();
+    } catch (e) {
+      window.alert(e.message);
+    }
   }
 
   async function checkAlerts() {
@@ -2365,9 +2610,13 @@
   }
 
   async function markAlertsRead() {
-    await api("/api/alerts/read");
-    loadPortfolio();
-    refreshAlertBadge();
+    try {
+      await api("/api/alerts/read");
+      loadPortfolio();
+      refreshAlertBadge();
+    } catch (e) {
+      window.alert(e.message);
+    }
   }
 
   /* ================= BACKTEST ================= */
@@ -2384,6 +2633,29 @@
   }
 
   async function loadBacktest() {
+    const saved = store.get("sl.btJob", null);
+    if (saved) {
+      try {
+        const job = await api("/api/backtest/status", { id: saved });
+        if (job.status === "running") {
+          state.btJobId = job.id;
+          $("#btRun").disabled = true;
+          showBtProgress(job);
+          pollBacktest();
+          return;
+        }
+        if (job.status === "done" && job.result) {
+          state.btJobId = job.id;
+          renderBacktest(job.result);
+          $("#btProgressPanel").classList.add("hidden");
+          store.set("sl.btJob", null);
+          return;
+        }
+      } catch (e) {
+        /* trabajo perdido tras reiniciar el servidor */
+      }
+      store.set("sl.btJob", null);
+    }
     try {
       const job = await api("/api/backtest/latest");
       if (job && job.result) {
@@ -2406,6 +2678,9 @@
       quality: $("#btQuality").checked ? 1 : 0,
     };
     $("#btRun").disabled = true;
+    state.btPollErrors = 0;
+    clearTimeout(state.hideBtTimer);
+    state.hideBtTimer = null;
     $("#btError").classList.add("hidden");
     $("#btProgressPanel").classList.remove("hidden");
     $("#btPct").textContent = "0%";
@@ -2416,6 +2691,7 @@
     try {
       const job = await api("/api/backtest/start", params);
       state.btJobId = job.id;
+      store.set("sl.btJob", job.id);
       showBtProgress(job);
       pollBacktest();
     } catch (e) {
@@ -2426,24 +2702,38 @@
 
   function pollBacktest() {
     if (state.btTimer) clearTimeout(state.btTimer);
+    const jobId = state.btJobId;
     const tick = async () => {
-      if (!state.btJobId) return;
+      if (!jobId || state.btJobId !== jobId) return;
       try {
-        const job = await api("/api/backtest/status", { id: state.btJobId });
+        const job = await api("/api/backtest/status", { id: jobId });
+        if (state.btJobId !== jobId) return;
+        state.btPollErrors = 0;
         showBtProgress(job);
         if (job.status === "running") {
           state.btTimer = setTimeout(tick, 1200);
         } else {
+          store.set("sl.btJob", null);
           $("#btRun").disabled = false;
           if (job.status === "done" && job.result) {
             renderBacktest(job.result);
-            setTimeout(() => $("#btProgressPanel").classList.add("hidden"), 2500);
+            clearTimeout(state.hideBtTimer);
+            state.hideBtTimer = setTimeout(
+              () => $("#btProgressPanel").classList.add("hidden"),
+              2500
+            );
             loadStatus();
           } else {
             showBtError(job.error || "El backtest no terminó correctamente");
           }
         }
       } catch (e) {
+        state.btPollErrors += 1;
+        if (state.btPollErrors >= 5) {
+          store.set("sl.btJob", null);
+          showBtError("Se perdió la conexión con el backtest. Vuelve a lanzarlo.");
+          return;
+        }
         state.btTimer = setTimeout(tick, 2500);
       }
     };
@@ -2451,6 +2741,8 @@
   }
 
   function showBtProgress(job) {
+    clearTimeout(state.hideBtTimer);
+    state.hideBtTimer = null;
     const pct = Math.max(0, Math.min(100, job.progress || 0));
     $("#btProgressPanel").classList.remove("hidden");
     $("#btProgressFill").style.width = pct + "%";

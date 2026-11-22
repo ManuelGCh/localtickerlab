@@ -21,7 +21,12 @@ SIGNALS = ["COMPRA FUERTE", "COMPRA", "NEUTRAL", "VENTA", "VENTA FUERTE"]
 def _current(symbol: str, data: Any) -> dict[str, Any] | None:
     """Precio, señal y RSI actuales, preferentemente desde la caché de puntuaciones."""
     cached = store.get_cached_score(symbol)
-    if cached and (cached.get("age_hours") or 99) < 48:
+    expected = store.last_market_close().date().isoformat()
+    if (
+        cached
+        and (cached.get("age_hours") or 99) < 48
+        and (cached.get("as_of") or "") >= expected
+    ):
         return dict(cached["row"])
     try:
         bars = data.get_bars(symbol)
@@ -37,6 +42,8 @@ def _current(symbol: str, data: Any) -> dict[str, Any] | None:
             "as_of": metrics["as_of"],
         }
     except (net.FetchError, ValueError, KeyError, TypeError):
+        if cached and (cached.get("age_hours") or 99) < 48:
+            return dict(cached["row"])
         return None
 
 
@@ -147,7 +154,7 @@ def _risk_block(rows: list[dict[str, Any]], total_value: float) -> dict[str, Any
 
     ordered = sorted(portfolio)
     var_index = max(0, int(0.05 * len(ordered)) - 1)
-    var_95 = -ordered[var_index]
+    var_95 = max(0.0, -ordered[var_index])
 
     equity = 1.0
     peak = 1.0
@@ -186,6 +193,8 @@ def _risk_block(rows: list[dict[str, Any]], total_value: float) -> dict[str, Any
         "max_drawdown": max_drawdown,
         "symbols": symbols,
         "matrix": matrix,
+        "limited": len([row for row in rows if row.get("value")]) > 10,
+        "analyzed": len(symbols),
         "avg_correlation": average,
         "diversification": (
             "Baja" if (average or 0) >= 0.7 else "Media" if (average or 0) >= 0.4 else "Alta"

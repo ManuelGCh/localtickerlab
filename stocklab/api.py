@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import plistlib
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,15 +80,9 @@ class Api:
         universes = {}
         for key in ("ndx", "all"):
             row = {"size": len(store.get_universe(key)), "age_hours": store.universe_age(key)}
-            latest = self.screener.latest(key)
+            latest = self.screener.latest_meta(key)
             if latest:
-                row["last_run"] = {
-                    "id": latest["id"],
-                    "status": latest["status"],
-                    "finished_at": latest.get("finished_at"),
-                    "done": latest.get("done"),
-                    "total": latest.get("total"),
-                }
+                row["last_run"] = latest
             universes[key] = row
         return {
             "ok": True,
@@ -167,6 +162,11 @@ class Api:
         }
         symbols = _list(params, "symbols")
         force = _bool(params, "force")
+
+        if filters["max_symbols"] < 0:
+            raise ApiError("el número de valores no puede ser negativo")
+        if filters["min_price"] < 0 or filters["min_market_cap"] < 0:
+            raise ApiError("los filtros no pueden ser negativos")
 
         if universe == "watchlist" and not symbols:
             raise ApiError("la watchlist está vacía")
@@ -407,7 +407,9 @@ class Api:
         }
 
     def system_retry(self, params: dict[str, list[str]]) -> dict[str, Any]:
-        return {"ok": True, "cleared": store.clear_failed_fetches()}
+        cleared = store.clear_failed_fetches()
+        self.data.clear_failed()
+        return {"ok": True, "cleared": cleared}
 
     def user_export(self, params: dict[str, list[str]]) -> RawResponse:
         body = json.dumps(store.export_user_data(), ensure_ascii=False, indent=2).encode()
@@ -416,7 +418,33 @@ class Api:
     def user_import(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise ApiError("formato de importación no válido")
-        return {"ok": True, **store.import_user_data(payload)}
+        clean = {"positions": [], "alerts": []}
+        for item in payload.get("positions") or []:
+            if not isinstance(item, dict):
+                continue
+            symbol = str(item.get("symbol") or "").strip().upper()
+            if not SYMBOL_RE.match(symbol):
+                continue
+            clean["positions"].append({**item, "symbol": symbol})
+        for item in payload.get("alerts") or []:
+            if not isinstance(item, dict):
+                continue
+            symbol = str(item.get("symbol") or "").strip().upper()
+            kind = str(item.get("kind") or "")
+            if not SYMBOL_RE.match(symbol) or kind not in portfolio.ALERT_KINDS:
+                continue
+            if kind == "signal":
+                if item.get("label") not in portfolio.SIGNALS:
+                    continue
+            else:
+                try:
+                    threshold = float(item.get("threshold") or 0)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(threshold) or threshold <= 0:
+                    continue
+            clean["alerts"].append({**item, "symbol": symbol})
+        return {"ok": True, **store.import_user_data(clean)}
 
     def backup(self, params: dict[str, list[str]]) -> RawResponse:
         body = store.backup_bytes()
@@ -447,7 +475,7 @@ class Api:
                 raise ApiError("señal no válida")
         else:
             threshold = _float(params, "threshold", 0.0)
-            if threshold <= 0 and kind != "price_above":
+            if not math.isfinite(threshold) or threshold <= 0:
                 raise ApiError("el umbral debe ser positivo")
         alert_id = store.add_alert(symbol, kind, threshold, label)
         return {"ok": True, "id": alert_id}
@@ -485,10 +513,19 @@ class Api:
             raise ApiError("símbolo no válido")
         shares = _float(params, "shares", 0.0)
         price = _float(params, "price", 0.0)
-        if shares <= 0 or price <= 0:
+        if (
+            not math.isfinite(shares)
+            or not math.isfinite(price)
+            or shares <= 0
+            or price <= 0
+        ):
             raise ApiError("acciones y precio deben ser positivos")
         stop = _float(params, "stop", 0.0) or None
         target = _float(params, "target", 0.0) or None
+        if stop is not None and (not math.isfinite(stop) or stop <= 0):
+            raise ApiError("el stop debe ser positivo")
+        if target is not None and (not math.isfinite(target) or target <= 0):
+            raise ApiError("el objetivo debe ser positivo")
         entry_date = (params.get("date", [""])[0] or "").strip() or None
         note = (params.get("note", [""])[0] or "").strip()
         position_id = store.add_position(
@@ -538,6 +575,10 @@ class Api:
             raise ApiError("rebalanceo fuera de rango (5-126)")
         if cfg.years < 1 or cfg.years > 9:
             raise ApiError("años fuera de rango (1-9)")
+        if cfg.top_n < 1 or cfg.top_n > 200:
+            raise ApiError("cartera fuera de rango (1-200)")
+        if cfg.cost_bps < 0 or cfg.cost_bps > 500:
+            raise ApiError("coste fuera de rango (0-500 pb)")
         job = self.backtests.start(cfg)
         return job.snapshot()
 
