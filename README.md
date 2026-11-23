@@ -59,8 +59,8 @@ python3 scripts/seed_demo.py --clear
 **Análisis individual**
 - Buscador con autocompletado sobre el catálogo local.
 - Gráfico de velas con SMA20/50/200, volumen y RSI (canvas propio, sin librerías).
-- Señal destacada (COMPRA FUERTE … VENTA FUERTE) con confianza, precio objetivo a 3
-  y 12 meses, stop sugerido, R:R, soporte y resistencia.
+- Señal destacada (COMPRA FUERTE … VENTA FUERTE) con confianza, precio objetivo a
+  3 meses, stop sugerido, R:R, soporte y resistencia.
 - **Resultados y calidad**: cuentas trimestrales, márgenes, FCF, EPS vs consenso,
   próximo reporte, rating y objetivo de analistas, y un score de calidad 0-100.
 - Puntuación con desglose, resumen automático y señales técnicas.

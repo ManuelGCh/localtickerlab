@@ -1982,11 +1982,6 @@
         ev.risk_reward != null ? ev.risk_reward.toFixed(2) : "—",
         "beneficio / riesgo"
       ),
-      stat(
-        "Objetivo 12M",
-        ev.target_12m != null ? "$" + fmt.price(ev.target_12m) : "—",
-        fmt.pct(ev.upside_12m, 1)
-      ),
     ].join("");
   }
 
