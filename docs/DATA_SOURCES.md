@@ -1,6 +1,6 @@
 # Fuentes de datos
 
-StockLab es una herramienta **local y educativa**. No redistribuye datos de terceros
+LocalTickerLab es una herramienta **local y educativa**. No redistribuye datos de terceros
 ni ofrece una instancia pública. Esta página documenta de dónde sale cada dato, cómo se
 cachea y qué limitaciones tiene.
 
@@ -83,7 +83,7 @@ La SEC exige un `User-Agent` identificable. Configúralo antes de usar el backte
 calidad:
 
 ```bash
-export STOCKLAB_SEC_UA="StockLab research tu@email.com"
+export LOCALTICKERLAB_SEC_UA="LocalTickerLab research tu@email.com"
 ```
 
 Las peticiones se espacian (~8/s) y se cachean. No se descargan documentos completos:
@@ -147,5 +147,5 @@ La base principal es `data/market.db`. La caché del backtest es independiente
 - No publiques una instancia del servidor: no tiene autenticación.
 - No es asesoramiento financiero.
 
-Si una fuente cambia, revisa `stocklab/sources/`, `stocklab/fundamentals.py`,
-`stocklab/sec.py` y `stocklab/news.py`.
+Si una fuente cambia, revisa `localtickerlab/sources/`, `localtickerlab/fundamentals.py`,
+`localtickerlab/sec.py` y `localtickerlab/news.py`.

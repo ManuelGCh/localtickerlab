@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="web/assets/brand/icon.svg" width="96" alt="StockLab" />
+  <img src="web/assets/brand/icon.svg" width="96" alt="LocalTickerLab" />
 </p>
 
-<h1 align="center">StockLab · Analizador NASDAQ</h1>
+<h1 align="center">LocalTickerLab · Analizador NASDAQ</h1>
 
 <p align="center">
 Dashboard local para analizar acciones del NASDAQ: descarga precios diarios, calcula
@@ -11,7 +11,7 @@ o estudiar un ticker concreto.
 </p>
 
 <p align="center">
-  <a href="https://github.com/ManuelGCh/stocklab-nasdaq/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ManuelGCh/stocklab-nasdaq/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/ManuelGCh/localtickerlab/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ManuelGCh/localtickerlab/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
 </p>
@@ -21,13 +21,13 @@ Los datos se guardan en una base SQLite local, así que las siguientes ejecucion
 instantáneas.
 
 ```bash
-git clone https://github.com/ManuelGCh/stocklab-nasdaq.git
-cd stocklab-nasdaq
+git clone https://github.com/ManuelGCh/localtickerlab.git
+cd localtickerlab
 python3 run.py
 ```
 
 Se abre en `http://127.0.0.1:8765` (si el puerto está ocupado, elige el siguiente libre
-y lo imprime). También puedes usar el doble clic en `StockLab.command`.
+y lo imprime). También puedes usar el doble clic en `LocalTickerLab.command`.
 
 ## Capturas
 
@@ -71,7 +71,7 @@ Detalle: [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
   personal y moderado; revisa sus condiciones antes de automatizar o redistribuir.
 - **No se redistribuyen datos de mercado**: la base SQLite se genera en local y queda
   fuera del repositorio. La licencia MIT cubre el código, no los datos de terceros.
-- SEC EDGAR exige identificarse. Define `STOCKLAB_SEC_UA` con un contacto real si vas
+- SEC EDGAR exige identificarse. Define `LOCALTICKERLAB_SEC_UA` con un contacto real si vas
   a consultarlo de forma intensiva; el valor por defecto es solo un marcador y la app
   avisa por consola cuando falta.
 
@@ -157,7 +157,7 @@ Internet. No hay telemetría. Antes de compartirla, revisa
 ## Cómo se calcula la puntuación
 
 Cada bloque se puntúa de 0 a 100 con reglas explícitas y se combina con estos pesos
-(configurables en `stocklab/config.py`):
+(configurables en `localtickerlab/config.py`):
 
 | Bloque     | Peso | Qué mide |
 |------------|------|----------|
@@ -262,7 +262,7 @@ La pestaña **Backtest** responde a la pregunta que ningún indicador responde s
   filings presentados antes de cada fecha (`filed`), sin lookahead, y mide su IC y el
   de una combinación 60% técnica + 40% calidad. Se activa con la casilla del backtest
   (añade ~1-2 min). Requiere conexión a SEC EDGAR; el User-Agent se puede personalizar
-  con `STOCKLAB_SEC_UA`.
+  con `LOCALTICKERLAB_SEC_UA`.
 
 ### Validación
 
@@ -306,7 +306,7 @@ tarda 15-25 min; con datos recientes, menos.
 El dashboard es **bajo demanda**: ábrelo cuando quieras verlo y ciérralo después.
 
 ```bash
-python3 run.py          # o doble clic en StockLab.command
+python3 run.py          # o doble clic en LocalTickerLab.command
 ```
 
 Los datos, la cartera, las alertas, la watchlist y las vistas guardadas quedan en SQLite;
@@ -330,9 +330,9 @@ python3 scripts/install_schedule.py
 Para Telegram, crea `data/notify.env` (está fuera de git):
 
 ```
-STOCKLAB_TELEGRAM_BOT_TOKEN=123456:ABC...
-STOCKLAB_TELEGRAM_CHAT_ID=123456789
-STOCKLAB_SEC_UA=StockLab tu@email.com
+LOCALTICKERLAB_TELEGRAM_BOT_TOKEN=123456:ABC...
+LOCALTICKERLAB_TELEGRAM_CHAT_ID=123456789
+LOCALTICKERLAB_SEC_UA=LocalTickerLab tu@email.com
 ```
 
 Desinstalar:
@@ -374,7 +374,7 @@ El botón **↻ Datos** de una ficha fuerza la descarga de ese ticker.
 
 ```
 run.py                    arranque y CLI
-stocklab/
+localtickerlab/
   config.py               rutas, pesos, constantes
   net.py                  cliente HTTP con reintentos y límite de concurrencia
   sources/nasdaq.py       listados e históricos (fuente principal)

@@ -1,4 +1,4 @@
-/* StockLab · lógica del dashboard */
+/* LocalTickerLab · lógica del dashboard */
 (function () {
   "use strict";
 
@@ -3010,7 +3010,7 @@
       const data = await api("/api/alerts/check");
       if (data.triggered && data.triggered.length) {
         if ("Notification" in window && Notification.permission === "granted") {
-          new Notification("StockLab · alertas", {
+          new Notification("LocalTickerLab · alertas", {
             body: data.triggered.map((item) => item.message).join(" · "),
           });
         }

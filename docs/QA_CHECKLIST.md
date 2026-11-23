@@ -3,7 +3,7 @@
 ## Automatizado
 
 - [x] `python -m unittest discover -s tests -v` → 105 tests.
-- [x] `python -m py_compile run.py stocklab/*.py`.
+- [x] `python -m py_compile run.py localtickerlab/*.py`.
 - [x] CI en Python 3.10, 3.12 y 3.14 (GitHub Actions).
 - [x] `data/` fuera de git.
 - [x] `gzip` en respuestas JSON.

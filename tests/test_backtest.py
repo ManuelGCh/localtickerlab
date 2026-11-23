@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import unittest
 
-from stocklab import backtest as bt
+from localtickerlab import backtest as bt
 
 
 def obs(score, fwd, action="COMPRA", date="2024-01-31", subs=None):

@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from stocklab import analysis, config, indicators as ind, store
-from stocklab.screener import apply_filters
+from localtickerlab import analysis, config, indicators as ind, store
+from localtickerlab.screener import apply_filters
 
 
 def make_bars(

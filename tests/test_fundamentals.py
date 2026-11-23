@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from stocklab import config, fundamentals as f, store
+from localtickerlab import config, fundamentals as f, store
 
 
 class TestParsing(unittest.TestCase):

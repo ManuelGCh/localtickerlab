@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from stocklab import scanstatus, store
+from localtickerlab import scanstatus, store
 
 
 class TestScanStatus(unittest.TestCase):

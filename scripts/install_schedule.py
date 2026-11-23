@@ -18,7 +18,7 @@ if sys.version_info < (3, 10):
     raise SystemExit(1)
 
 ROOT = Path(__file__).resolve().parent.parent
-LABEL = "com.stocklab.daily"
+LABEL = "com.localtickerlab.daily"
 PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 
 
@@ -96,7 +96,7 @@ def install(interval: int, enrich: int) -> int:
     print(f"Instalado: {PLIST}")
     print("Comprueba cada hora si hay un cierre nuevo y, si lo hay, escanea una vez.")
     print("Notificaciones: macOS (Centro de notificaciones) y Telegram si defines")
-    print(f"  STOCKLAB_TELEGRAM_BOT_TOKEN y STOCKLAB_TELEGRAM_CHAT_ID en {ROOT / 'data' / 'notify.env'}")
+    print(f"  LOCALTICKERLAB_TELEGRAM_BOT_TOKEN y LOCALTICKERLAB_TELEGRAM_CHAT_ID en {ROOT / 'data' / 'notify.env'}")
     print("Registro:", ROOT / "data" / "scan.log")
     print("Desinstalar: python3 scripts/install_schedule.py --uninstall")
     return 0

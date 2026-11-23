@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from stocklab import config, portfolio, store
-from stocklab.news import _event, _sentiment
-from stocklab.sec import _quarterly_facts, quality_at
+from localtickerlab import config, portfolio, store
+from localtickerlab.news import _event, _sentiment
+from localtickerlab.sec import _quarterly_facts, quality_at
 
 
 def series():

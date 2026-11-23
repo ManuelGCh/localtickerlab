@@ -1,6 +1,6 @@
 # Seguridad y privacidad
 
-StockLab está diseñado como una aplicación **local, monousuario y de solo lectura sobre
+LocalTickerLab está diseñado como una aplicación **local, monousuario y de solo lectura sobre
 datos públicos**. No está pensado para exponerse en Internet.
 
 ## Modelo de seguridad
@@ -36,7 +36,7 @@ descargados y respeta sus términos y límites.
 La SEC requiere un `User-Agent` identificable:
 
 ```bash
-export STOCKLAB_SEC_UA="StockLab research tu@email.com"
+export LOCALTICKERLAB_SEC_UA="LocalTickerLab research tu@email.com"
 ```
 
 ## Secretos

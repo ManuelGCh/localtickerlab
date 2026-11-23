@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from stocklab import backtest as bt
-from stocklab import config, portfolio, store
+from localtickerlab import backtest as bt
+from localtickerlab import config, portfolio, store
 from tests.test_analysis import make_bars
 
 

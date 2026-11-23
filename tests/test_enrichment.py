@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from stocklab import config, store
-from stocklab.screener import ScreenJob
+from localtickerlab import config, store
+from localtickerlab.screener import ScreenJob
 
 
 class FakeFundamentals:

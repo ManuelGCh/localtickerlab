@@ -343,7 +343,7 @@ class Api:
                 ]
             )
         body = ("\ufeff" + buffer.getvalue()).encode("utf-8")
-        return RawResponse(body, "text/csv; charset=utf-8", "stocklab_screener.csv")
+        return RawResponse(body, "text/csv; charset=utf-8", "localtickerlab_screener.csv")
 
     def screen_cancel(self, params: dict[str, list[str]]) -> dict[str, Any]:
         job_id = (params.get("id", [""])[0] or "").strip()
@@ -389,7 +389,7 @@ class Api:
         return scanstatus.read()
 
     def system(self, params: dict[str, list[str]]) -> dict[str, Any]:
-        plist = Path.home() / "Library" / "LaunchAgents" / "com.stocklab.daily.plist"
+        plist = Path.home() / "Library" / "LaunchAgents" / "com.localtickerlab.daily.plist"
         interval = None
         if plist.exists():
             try:
@@ -425,7 +425,7 @@ class Api:
 
     def user_export(self, params: dict[str, list[str]]) -> RawResponse:
         body = json.dumps(store.export_user_data(), ensure_ascii=False, indent=2).encode()
-        return RawResponse(body, "application/json", "stocklab_datos.json")
+        return RawResponse(body, "application/json", "localtickerlab_datos.json")
 
     def user_import(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(payload, dict):
@@ -471,7 +471,7 @@ class Api:
 
     def backup(self, params: dict[str, list[str]]) -> RawResponse:
         body = store.backup_bytes()
-        filename = f"stocklab_backup_{store.now_ny().date().isoformat()}.db"
+        filename = f"localtickerlab_backup_{store.now_ny().date().isoformat()}.db"
         return RawResponse(body, "application/octet-stream", filename)
 
     def watchlist_get(self, params: dict[str, list[str]]) -> dict[str, Any]:

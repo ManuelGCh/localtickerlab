@@ -33,8 +33,8 @@ def _macos(title: str, message: str) -> bool:
 
 
 def _telegram(title: str, message: str) -> bool:
-    token = os.environ.get("STOCKLAB_TELEGRAM_BOT_TOKEN")
-    chat = os.environ.get("STOCKLAB_TELEGRAM_CHAT_ID")
+    token = os.environ.get("LOCALTICKERLAB_TELEGRAM_BOT_TOKEN")
+    chat = os.environ.get("LOCALTICKERLAB_TELEGRAM_CHAT_ID")
     if not token or not chat:
         return False
     payload = urllib.parse.urlencode(

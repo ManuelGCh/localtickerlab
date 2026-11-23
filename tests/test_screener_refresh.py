@@ -8,9 +8,9 @@ from pathlib import Path
 from unittest import mock
 from zoneinfo import ZoneInfo
 
-from stocklab import config, store
-from stocklab import portfolio
-from stocklab.screener import ScreenerService
+from localtickerlab import config, store
+from localtickerlab import portfolio
+from localtickerlab.screener import ScreenerService
 
 NY = ZoneInfo("America/New_York")
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import run
-from stocklab import notify, store
+from localtickerlab import notify, store
 
 
 class TestDailyTrigger(unittest.TestCase):
@@ -30,8 +30,8 @@ class TestDailyTrigger(unittest.TestCase):
 
 class TestNotify(unittest.TestCase):
     def test_no_channels_is_silent(self):
-        with mock.patch("stocklab.notify._macos", return_value=False), mock.patch(
-            "stocklab.notify._telegram", return_value=False
+        with mock.patch("localtickerlab.notify._macos", return_value=False), mock.patch(
+            "localtickerlab.notify._telegram", return_value=False
         ):
             self.assertEqual(notify.send("t", "m"), [])
 

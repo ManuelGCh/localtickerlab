@@ -1,4 +1,4 @@
-"""Configuración global de StockLab."""
+"""Configuración global de LocalTickerLab."""
 from __future__ import annotations
 
 from pathlib import Path

@@ -15,8 +15,8 @@ from typing import Any
 
 from . import config, indicators as ind, net, store
 
-_UA_ENV = "STOCKLAB_SEC_UA"
-_UA_DEFAULT = "StockLab research (contacto@example.com)"
+_UA_ENV = "LOCALTICKERLAB_SEC_UA"
+_UA_DEFAULT = "LocalTickerLab research (contacto@example.com)"
 _SEC_HEADERS = {
     "User-Agent": os.environ.get(_UA_ENV, _UA_DEFAULT),
     "Accept": "application/json",
@@ -43,7 +43,7 @@ def _warn_missing_ua() -> None:
         return
     _ua_warned = True
     print(
-        "Aviso: define STOCKLAB_SEC_UA con un contacto real para consultar SEC EDGAR.",
+        "Aviso: define LOCALTICKERLAB_SEC_UA con un contacto real para consultar SEC EDGAR.",
         file=sys.stderr,
     )
 

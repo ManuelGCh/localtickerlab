@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1.0 — 2026-11-23
+
+### Cambio de nombre
+
+- El proyecto pasa a llamarse **LocalTickerLab** para evitar colisiones con otros
+  productos y dejar claro el enfoque local.
+- Nuevo repositorio: `ManuelGCh/localtickerlab`.
+- Identificadores actualizados: paquete `localtickerlab`, variables
+  `LOCALTICKERLAB_*`, agente `com.localtickerlab.daily` y `LocalTickerLab.command`.
+- Capturas, social preview e iconos regenerados con la nueva marca.
+
 ## v1.0.0 — 2026-11-23
 
 Primera versión publicable como laboratorio local de análisis y validación.
@@ -24,7 +35,7 @@ Primera versión publicable como laboratorio local de análisis y validación.
 - Proyecto educativo, no asesoramiento financiero; el backtest publica el resultado
   negativo y la calidad fundamental es contexto, no señal.
 - Sin redistribución de datos: la base SQLite es local y no se versiona.
-- SEC EDGAR pide un contacto real; la app avisa si `STOCKLAB_SEC_UA` no está definido.
+- SEC EDGAR pide un contacto real; la app avisa si `LOCALTICKERLAB_SEC_UA` no está definido.
 
 ### Calidad
 

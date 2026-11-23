@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import unittest
 
-from stocklab import indicators as ind
+from localtickerlab import indicators as ind
 
 
 def ramp(n: int, start: float = 1.0, step: float = 1.0) -> list[float]:

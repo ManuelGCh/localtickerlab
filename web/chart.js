@@ -1,4 +1,4 @@
-/* StockLab · gráfico de velas en canvas puro (sin dependencias) */
+/* LocalTickerLab · gráfico de velas en canvas puro (sin dependencias) */
 (function () {
   "use strict";
 
@@ -501,8 +501,8 @@
       ctx.fillStyle = "rgba(148, 163, 184, 0.62)";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      const firstMs = Date.parse(dates[view.start] || "");
-      const lastMs = Date.parse(dates[view.end - 1] || "");
+      const firstMs = Date.parse(dates[0] || "");
+      const lastMs = Date.parse(dates[dates.length - 1] || "");
       const spanDays = firstMs && lastMs ? (lastMs - firstMs) / 86400000 : 0;
       const labelFor = (date) => {
         if (!date) return "";
@@ -511,7 +511,7 @@
         return `${date.slice(8, 10)}/${date.slice(5, 7)}`;
       };
       for (let k = 0; k < labels; k++) {
-        const idx = Math.round(view.start + ((view.n - 1) * k) / (labels - 1 || 1));
+        const idx = Math.round(((dates.length - 1) * k) / (labels - 1 || 1));
         const date = dates[idx];
         if (!date) continue;
         ctx.fillText(labelFor(date), xAt(idx), padT + h + 7);

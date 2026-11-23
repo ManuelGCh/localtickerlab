@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""StockLab · analizador de acciones del NASDAQ.
+"""LocalTickerLab · analizador de acciones del NASDAQ.
 
 Uso:
     python3 run.py                 # abre el dashboard en el navegador
@@ -18,20 +18,20 @@ import webbrowser
 
 if sys.version_info < (3, 10):
     sys.stderr.write(
-        "StockLab necesita Python 3.10 o superior.\n"
+        "LocalTickerLab necesita Python 3.10 o superior.\n"
         f"Estás usando Python {sys.version.split()[0]} en {sys.executable}.\n"
         "Prueba con: /opt/homebrew/bin/python3 run.py\n"
     )
     raise SystemExit(1)
 
-from stocklab import config, notify, scanstatus, store
-from stocklab.api import Api
-from stocklab.backtest import BacktestData, BacktestService
-from stocklab.fundamentals import FundamentalsService
-from stocklab.news import NewsService
-from stocklab import portfolio
-from stocklab.screener import DataService, ScanBusy, ScreenerService, UniverseService
-from stocklab.server import create_server, find_port
+from localtickerlab import config, notify, scanstatus, store
+from localtickerlab.api import Api
+from localtickerlab.backtest import BacktestData, BacktestService
+from localtickerlab.fundamentals import FundamentalsService
+from localtickerlab.news import NewsService
+from localtickerlab import portfolio
+from localtickerlab.screener import DataService, ScanBusy, ScreenerService, UniverseService
+from localtickerlab.server import create_server, find_port
 
 
 def parse_args() -> argparse.Namespace:
@@ -143,7 +143,7 @@ def run_scan_once(args, screener, fundamentals, data) -> int:
     if job.status != "done":
         message = job.error or job.status
         scanstatus.finish(phase="error", message=message)
-        notify.send("StockLab · error de escaneo", message)
+        notify.send("LocalTickerLab · error de escaneo", message)
         print(f"Error: {message}")
         return 1
 
@@ -268,7 +268,7 @@ def run_scan_once(args, screener, fundamentals, data) -> int:
         )
 
     if not args.no_notify:
-        channels = notify.send("StockLab · resumen diario", notify.report_body(summary))
+        channels = notify.send("LocalTickerLab · resumen diario", notify.report_body(summary))
         if channels:
             print("Notificación enviada por:", ", ".join(channels))
     return 0
@@ -313,7 +313,7 @@ def main() -> int:
             return run_scan_once(args, screener, fundamentals, data)
         except Exception as exc:  # noqa: BLE001
             scanstatus.finish(phase="error", message=str(exc))
-            notify.send("StockLab · error de escaneo", str(exc))
+            notify.send("LocalTickerLab · error de escaneo", str(exc))
             print(f"Error: {exc}")
             return 1
     port = find_port(args.host, args.port)
@@ -321,7 +321,7 @@ def main() -> int:
     url = f"http://{args.host}:{port}"
 
     print()
-    print("  StockLab — analizador NASDAQ")
+    print("  LocalTickerLab — analizador NASDAQ")
     print(f"  Dashboard: {url}")
     print(f"  Base de datos: {config.DB_PATH}")
     print("  Ctrl+C para detener.")

@@ -25,7 +25,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Compile
-        run: python -m py_compile run.py stocklab/*.py scripts/*.py
+        run: python -m py_compile run.py localtickerlab/*.py scripts/*.py
 
       - name: Tests
         run: python -m unittest discover -s tests -v

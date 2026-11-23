@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from stocklab import store  # noqa: E402
+from localtickerlab import store  # noqa: E402
 
 POSITIONS = [
     ("AAPL", 10, 300.0, 280.0, 400.0, "2026-06-01", "Demostración"),
@@ -52,7 +52,7 @@ def clear() -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Datos de demostración de StockLab")
+    parser = argparse.ArgumentParser(description="Datos de demostración de LocalTickerLab")
     parser.add_argument("--clear", action="store_true", help="elimina posiciones y alertas")
     args = parser.parse_args()
     clear() if args.clear else seed()

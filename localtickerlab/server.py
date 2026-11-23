@@ -68,7 +68,7 @@ mimetypes.add_type("image/svg+xml", ".svg")
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "StockLab/1.0"
+    server_version = "LocalTickerLab/1.1"
     api: Api
 
     # Silencia el log ruidoso de cada petición.
