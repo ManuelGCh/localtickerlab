@@ -42,6 +42,35 @@ python3 scripts/seed_demo.py --clear
 
 ---
 
+## Fuentes de datos
+
+- **Nasdaq.com**: precios diarios, fundamentales, calendario y consenso.
+- **Yahoo Finance**: respaldo de precios históricos.
+- **SEC EDGAR**: calidad *point-in-time* desde XBRL.
+- **Google News RSS**: titulares y eventos.
+
+Salvo SEC, son endpoints públicos **no oficiales y sin SLA**. Los datos se cachean en
+SQLite y no se redistribuyen. La app muestra la lista completa en
+**Cartera → Sistema → Fuentes de datos** y en el pie.
+
+Detalle: [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
+
+## Validación
+
+El backtest se publica con resultado negativo incluido: a 63 sesiones el IC
+out-of-sample es −0,015 y la calidad SEC −0,031. La conclusión es que **no hay evidencia
+suficiente de edge**; por eso la calidad es contexto y no señal.
+
+Metodología, muestras y limitaciones: [`docs/VALIDATION.md`](docs/VALIDATION.md).
+
+## Seguridad y alcance
+
+Es una aplicación **local y monousuario**, sin autenticación. No debe exponerse a
+Internet. No hay telemetría. Antes de compartirla, revisa
+[`SECURITY.md`](SECURITY.md) y la checklist de QA: [`docs/QA_CHECKLIST.md`](docs/QA_CHECKLIST.md).
+
+---
+
 ## Qué incluye
 
 **Screener**
@@ -401,6 +430,14 @@ MIT. Consulta [LICENSE](LICENSE).
 ```
 python3 -m unittest discover -s tests -v
 ```
+
+105 tests. CI en GitHub Actions para Python 3.10, 3.12 y 3.14; compilación, tests,
+comprobación de que `data/` no está trackeado y smoke test del CLI. Checklist manual de
+navegadores en [`docs/QA_CHECKLIST.md`](docs/QA_CHECKLIST.md).
+
+## Changelog
+
+Cambios por versión: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Opciones de `run.py`
 

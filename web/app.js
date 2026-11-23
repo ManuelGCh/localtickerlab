@@ -2782,27 +2782,39 @@
       `<div class="system-item"><div class="k">${k}</div><div class="v ${cls || ""}">${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
 
     const failed = quality.failed || [];
-    $("#systemInfo").innerHTML = [
-      item(
-        "Escaneo diario",
-        scheduler.installed ? "Instalado" : "No instalado",
-        scheduler.installed
-          ? `launchd · ${scheduler.interval ? `cada ${Math.round(scheduler.interval / 60)} min` : "cada hora"}`
-          : "python3 scripts/install_schedule.py",
-        scheduler.installed ? "pos" : "neg"
-      ),
-      item(
-        "Última ejecución diaria",
-        data.last_daily ? fmt.date(data.last_daily.slice(0, 10)) : "—",
-        data.last_daily ? "marcador guardado" : "sin ejecuciones"
-      ),
-      item("Datos", data.last_run ? fmt.date(data.last_run.slice(0, 10)) : "—", `${nf0.format(db.cached_symbols || 0)} valores`),
-      item("Fallidos", nf0.format(quality.failed_count || 0), "sin histórico", quality.failed_count ? "neg" : ""),
-      item("Obsoletos", nf0.format(quality.stale_count || 0), "pendientes de cierre"),
-      item("Base de datos", `${db.db_mb || 0} MB`, `${nf0.format(db.bars || 0)} barras`),
-    ].join("") + (failed.length
-      ? `<div class="system-item" style="grid-column:1/-1"><div class="k">Tickers sin datos</div><div class="failed-list">${failed.map((symbol) => `<span class="wchip">${escapeHtml(symbol)}</span>`).join("")}</div></div>`
-      : "");
+    const sources = data.sources || [];
+    $("#systemInfo").innerHTML =
+      [
+        item(
+          "Escaneo diario",
+          scheduler.installed ? "Instalado" : "No instalado",
+          scheduler.installed
+            ? `launchd · ${scheduler.interval ? `cada ${Math.round(scheduler.interval / 60)} min` : "cada hora"}`
+            : "python3 scripts/install_schedule.py",
+          scheduler.installed ? "pos" : "neg"
+        ),
+        item(
+          "Última ejecución diaria",
+          data.last_daily ? fmt.date(data.last_daily.slice(0, 10)) : "—",
+          data.last_daily ? "marcador guardado" : "sin ejecuciones"
+        ),
+        item("Datos", data.last_run ? fmt.date(data.last_run.slice(0, 10)) : "—", `${nf0.format(db.cached_symbols || 0)} valores`),
+        item("Fallidos", nf0.format(quality.failed_count || 0), "sin histórico", quality.failed_count ? "neg" : ""),
+        item("Obsoletos", nf0.format(quality.stale_count || 0), "pendientes de cierre"),
+        item("Base de datos", `${db.db_mb || 0} MB`, `${nf0.format(db.bars || 0)} barras`),
+      ].join("") +
+      (failed.length
+        ? `<div class="system-item" style="grid-column:1/-1"><div class="k">Tickers sin datos</div><div class="failed-list">${failed.map((symbol) => `<span class="wchip">${escapeHtml(symbol)}</span>`).join("")}</div></div>`
+        : "") +
+      (sources.length
+        ? `<div class="system-item sources-card" style="grid-column:1/-1">
+            <div class="k">Fuentes de datos</div>
+            <div class="sources-list">
+              ${sources.map((source) => `<a href="${escapeAttr(source.url)}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(source.name)}</strong><span>${escapeHtml(source.role)}</span></a>`).join("")}
+            </div>
+            <div class="s">Datos públicos; salvo SEC, endpoints no oficiales sin SLA. La base local no se redistribuye.</div>
+          </div>`
+        : "");
 
     $("#retryFailed").disabled = !quality.failed_count;
     const log = $("#scanLog");

@@ -11,6 +11,11 @@
       autenticación, límites y una revisión de ToS. Mejor vídeo + repositorio.
 - [ ] Licencia MIT incluida.
 - [ ] Repo creado en GitHub, README renderizado y social preview subida.
+- [ ] Tag `v1.0.0` y changelog revisado.
+- [ ] CI en verde para Python 3.10/3.12/3.14.
+- [ ] Fuentes de datos visibles en la app y en `docs/DATA_SOURCES.md`.
+- [ ] Validación y límites en `docs/VALIDATION.md`.
+- [ ] QA manual completada en Safari/Firefox/móvil (`docs/QA_CHECKLIST.md`).
 
 ## Assets
 

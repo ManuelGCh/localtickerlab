@@ -63,6 +63,37 @@ DISCLAIMER = (
     "tener errores o retrasos. No es asesoramiento financiero."
 )
 
+DATA_SOURCES = [
+    {
+        "name": "Nasdaq.com",
+        "role": "Precios diarios, fundamentales, calendario y consenso de analistas",
+        "url": "https://www.nasdaq.com/",
+        "official": False,
+        "note": "API pública no documentada; puede cambiar o limitar peticiones.",
+    },
+    {
+        "name": "Yahoo Finance",
+        "role": "Respaldo de precios históricos",
+        "url": "https://finance.yahoo.com/",
+        "official": False,
+        "note": "Endpoint público de gráficos usado solo si Nasdaq falla.",
+    },
+    {
+        "name": "SEC EDGAR",
+        "role": "Calidad point-in-time desde XBRL",
+        "url": "https://www.sec.gov/edgar",
+        "official": True,
+        "note": "Requiere User-Agent propio; se espacian las peticiones.",
+    },
+    {
+        "name": "Google News RSS",
+        "role": "Titulares, eventos y sentimiento aproximado",
+        "url": "https://news.google.com/",
+        "official": False,
+        "note": "Solo titulares; el sentimiento es orientativo.",
+    },
+]
+
 # Umbrales de la señal de compra/venta (puntuación compuesta).
 ACTION_THRESHOLDS = [
     (78.0, "COMPRA FUERTE", 4),

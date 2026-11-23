@@ -1040,3 +1040,17 @@ details.diag > .diag-body { padding: 0 20px 18px; }
   #watchTable { display: none !important; }
   #watchCards { display: flex; }
 }
+
+.footer { display: flex; flex-direction: column; gap: 5px; }
+.footer-sources { color: rgba(138, 151, 169, .55); }
+.footer-sources a { color: rgba(165, 180, 252, .8); text-decoration: none; }
+.footer-sources a:hover { text-decoration: underline; }
+.sources-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin: 7px 0 6px; }
+.sources-list a {
+  display: flex; flex-direction: column; gap: 2px; padding: 9px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.02);
+  text-decoration: none; color: var(--text); font-size: 11px;
+}
+.sources-list a:hover { border-color: var(--line-strong); background: rgba(255,255,255,.04); }
+.sources-list strong { font-size: 12px; }
+.sources-list span { color: var(--muted); line-height: 1.4; }

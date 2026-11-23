@@ -91,6 +91,7 @@ class Api:
             "universes": universes,
             "last_run": store.latest_run_time(),
             "weights": config.SCORE_WEIGHTS,
+            "sources": config.DATA_SOURCES,
             "disclaimer": config.DISCLAIMER,
         }
 
@@ -411,6 +412,7 @@ class Api:
             "last_run": store.latest_run_time(),
             "quality": store.data_quality(),
             "db": store.stats(),
+            "sources": config.DATA_SOURCES,
             "log_tail": log_tail,
             "scan": scanstatus.read(),
         }
