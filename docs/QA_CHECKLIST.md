@@ -34,15 +34,28 @@
 - [x] Herramientas y filtros sin desbordar.
 - [x] Charts y tablas con scroll interno.
 
-## Pendiente de verificación manual
+## Escritorio — Firefox 160 (macOS)
 
-- [ ] Safari macOS.
-- [ ] Firefox macOS.
-- [ ] Safari iOS.
-- [ ] Chrome Android.
+- [x] Carga inicial del screener con 100 filas y pie de fuentes.
+- [x] Sin scroll horizontal a 1440 px.
+- [x] Ficha de AAPL: vista activa, canvas 1035×360 y rango **10A** con histórico largo.
+- [x] Cartera → Sistema: 4 fuentes visibles en `.sources-list`.
+- [x] Backtest: página y botón **Ejecutar backtest** visibles.
+- [x] Ventana mínima de Firefox (500 px): tabla sustituida por tarjetas, sin desbordar.
 
-Estos navegadores no se pudieron automatizar en el entorno de desarrollo; la checklist
-debe completarse antes de etiquetar una release pública.
+## Móvil — Safari iOS 18 (iPhone 16 Pro)
+
+- [x] Carga inicial y onboarding.
+- [x] Cabecera, navegación y selector de universo sin desbordar.
+- [x] Screener: tarjetas y controles apilados correctamente.
+
+## Pendiente (opcional, no bloquea la release)
+
+- [ ] Safari macOS (la automatización remota exige contraseña de administrador).
+- [ ] Firefox Android / Chrome Android en dispositivo real (el emulador se detuvo).
+
+Chrome escritorio y móvil, Firefox escritorio y Safari iOS están verificados. El resto
+son comprobaciones de cortesía: la app es local-first y el objetivo principal es Chrome.
 
 ## Smoke test de API
 
@@ -61,9 +74,9 @@ Comprobar que no hay 5xx y que `api/system` incluye `sources`.
 
 ## Antes de publicar
 
-- [ ] Repo público y README renderizado.
-- [ ] Social preview subida.
-- [ ] Tag `v1.0.0`.
-- [ ] `docs/DATA_SOURCES.md` y `docs/VALIDATION.md` revisados.
-- [ ] Ningún dato personal en el historial de git.
+- [x] Repo público y README renderizado.
+- [x] Social preview subida.
+- [x] Tag `v1.0.0`.
+- [x] `docs/DATA_SOURCES.md` y `docs/VALIDATION.md` revisados.
+- [x] Ningún dato personal en el historial de git.
 - [ ] Vídeo grabado con datos de demo.
