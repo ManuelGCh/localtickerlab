@@ -2,19 +2,20 @@
 
 ## Antes de publicar
 
-- [ ] `data/` no está en el repo (base de datos, logs, `notify.env`, tokens de Telegram).
-- [ ] Las capturas usan datos de demostración y no muestran rutas, correos ni la terminal.
-- [ ] El README incluye el aviso: proyecto educativo, no asesoramiento financiero.
-- [ ] Se citan las fuentes (nasdaq.com, SEC EDGAR, Google News RSS) como endpoints públicos
+- [x] `data/` no está en el repo (base de datos, logs, `notify.env`, tokens de Telegram).
+- [x] Las capturas usan datos de demostración y no muestran rutas, correos ni la terminal.
+- [x] El README incluye el aviso: proyecto educativo, no asesoramiento financiero.
+- [x] Se citan las fuentes (nasdaq.com, SEC EDGAR, Google News RSS) como endpoints públicos
       no oficiales y de uso personal/educativo.
-- [ ] No se publica una instancia del servidor: consume datos de terceros y requeriría
+- [x] No se publica una instancia del servidor: consume datos de terceros y requeriría
       autenticación, límites y una revisión de ToS. Mejor vídeo + repositorio.
-- [ ] Licencia MIT incluida.
-- [ ] Repo creado en GitHub, README renderizado y social preview subida.
-- [ ] Tag `v1.0.0` y changelog revisado.
-- [ ] CI en verde para Python 3.10/3.12/3.14.
-- [ ] Fuentes de datos visibles en la app y en `docs/DATA_SOURCES.md`.
-- [ ] Validación y límites en `docs/VALIDATION.md`.
+- [x] Licencia MIT incluida.
+- [x] Repo creado en GitHub y README renderizado: https://github.com/ManuelGCh/stocklab-nasdaq
+- [ ] Social preview subida (Settings → Social preview; la API no lo permite).
+- [x] Tag `v1.0.0`, release y changelog revisado.
+- [x] CI en verde para Python 3.10/3.12/3.14.
+- [x] Fuentes de datos visibles en la app y en `docs/DATA_SOURCES.md`.
+- [x] Validación y límites en `docs/VALIDATION.md`.
 - [ ] QA manual completada en Safari/Firefox/móvil (`docs/QA_CHECKLIST.md`).
 
 ## Assets
