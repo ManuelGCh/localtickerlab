@@ -16,7 +16,8 @@
 - [x] CI en verde para Python 3.10/3.12/3.14.
 - [x] Fuentes de datos visibles en la app y en `docs/DATA_SOURCES.md`.
 - [x] Validación y límites en `docs/VALIDATION.md`.
-- [ ] QA manual completada en Safari/Firefox/móvil (`docs/QA_CHECKLIST.md`).
+- [x] QA verificada en Chrome, Firefox escritorio y Safari iOS; resto opcional
+      (`docs/QA_CHECKLIST.md`).
 
 ## Assets
 
@@ -26,38 +27,7 @@
 - `docs/screenshots/02-analisis.png`
 - `docs/screenshots/03-backtest.png`
 - `docs/screenshots/04-cartera.png`
-- Vídeo de 30 s: buscar `AAPL` → ficha → screener → backtest.
-
-## LinkedIn (borrador)
-
-> He construido **StockLab**, un analizador del NASDAQ que corre en local.
->
-> Analiza ~5.000 valores, calcula señal, objetivo, stop y R:R, añade resultados
-> trimestrales y calidad fundamental, y permite validar todo con backtest walk-forward
-> y datos point-in-time de la SEC.
->
-> Lo que más me ha enseñado no es la señal: es **medirla**. A 21 días el IC técnico ronda
-> 0,06; a 63 días desaparece. La calidad fundamental no mejora la selección en la muestra.
-> Publiqué el resultado negativo igual que el positivo.
->
-> Stack: Python (solo biblioteca estándar) + SQLite + JS vanilla. Sin dependencias.
->
-> Proyecto educativo. No es asesoramiento financiero.
->
-> Código y vídeo: [enlace]
-
-Hashtags: `#Python #DataEngineering #Fintech #Quant #BuildInPublic`
-
-## X / Twitter (hilo)
-
-1. He construido un analizador del NASDAQ que corre en local. 5.000 valores, señales,
-   fundamentales, backtest y cartera. Sin dependencias: Python stdlib + SQLite + JS.
-   [captura]
-2. Lo interesante no es la señal, es la validación: 21d IC ≈ 0,06; 63d ≈ 0. La calidad
-   fundamental no mejora la selección. Prefiero publicar eso a vender humo.
-3. Arquitectura: ingesta con caché, indicadores en Python puro, backtest walk-forward,
-   calidad point-in-time con SEC, dashboard local.
-4. Código: [repo]. Proyecto educativo, no asesoramiento financiero.
+- Vídeo de demostración: pendiente de grabar con datos demo (75–85 s).
 
 ## Qué no decir
 
