@@ -11,7 +11,7 @@
       autenticación, límites y una revisión de ToS. Mejor vídeo + repositorio.
 - [x] Licencia MIT incluida.
 - [x] Repo creado en GitHub y README renderizado: https://github.com/ManuelGCh/stocklab-nasdaq
-- [ ] Social preview subida (Settings → Social preview; la API no lo permite).
+- [x] Social preview subida y verificada (1280×640).
 - [x] Tag `v1.0.0`, release y changelog revisado.
 - [x] CI en verde para Python 3.10/3.12/3.14.
 - [x] Fuentes de datos visibles en la app y en `docs/DATA_SOURCES.md`.
