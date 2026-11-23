@@ -16,7 +16,7 @@
 - [x] Paginación y selección múltiple.
 - [x] Acciones masivas: watchlist, comparador y CSV.
 - [x] Ficha: Resumen, Resultados, Noticias, Métricas y Comparar.
-- [x] Gráfico: 1M/3M/6M/1A y **Máx** con histórico largo y eje por años.
+- [x] Gráfico: 1M/3M/6M/1A/10A con histórico largo y eje por años.
 - [x] Fundamentales y enriquecimiento.
 - [x] Backtest: OOS, curva plegada, detalle, cancelación.
 - [x] Cartera: curva, posiciones, edición, correlación y alertas.

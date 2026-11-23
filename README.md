@@ -88,7 +88,7 @@ Internet. No hay telemetría. Antes de compartirla, revisa
 **Análisis individual**
 - Buscador con autocompletado sobre el catálogo local.
 - Gráfico de velas con SMA20/50/200, volumen y RSI (canvas propio, sin librerías).
-  La ficha descarga hasta ~10 años (máximo disponible en la fuente) para el rango Máx.
+  La ficha descarga hasta ~10 años (máximo disponible en la fuente) para el rango 10A.
 - Señal destacada (COMPRA FUERTE … VENTA FUERTE) con confianza, precio objetivo a
   3 meses, stop sugerido, R:R, soporte y resistencia.
 - **Resultados y calidad**: cuentas trimestrales, márgenes, FCF, EPS vs consenso,
