@@ -19,6 +19,13 @@ Primera versión publicable como laboratorio local de análisis y validación.
 - Escaneo diario opcional con launchd y bloqueo global de escaneos.
 - UI responsive, onboarding, paginación, acciones masivas y navegación por teclado.
 
+### Aviso legal y uso
+
+- Proyecto educativo, no asesoramiento financiero; el backtest publica el resultado
+  negativo y la calidad fundamental es contexto, no señal.
+- Sin redistribución de datos: la base SQLite es local y no se versiona.
+- SEC EDGAR pide un contacto real; la app avisa si `STOCKLAB_SEC_UA` no está definido.
+
 ### Calidad
 
 - 105 tests de Python.

@@ -8,19 +8,21 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import sys
 import threading
 import time
 from typing import Any
 
 from . import config, indicators as ind, net, store
 
+_UA_ENV = "STOCKLAB_SEC_UA"
+_UA_DEFAULT = "StockLab research (contacto@example.com)"
 _SEC_HEADERS = {
-    "User-Agent": os.environ.get(
-        "STOCKLAB_SEC_UA", "StockLab research (contacto@example.com)"
-    ),
+    "User-Agent": os.environ.get(_UA_ENV, _UA_DEFAULT),
     "Accept": "application/json",
     "Accept-Encoding": "gzip, deflate",
 }
+_ua_warned = False
 _CIK_PATH = config.DATA_DIR / "sec_ciks.json"
 _REV_TAGS = (
     "RevenueFromContractWithCustomerExcludingAssessedTax",
@@ -34,7 +36,20 @@ _polite_lock = threading.Lock()
 _last_call = [0.0]
 
 
+def _warn_missing_ua() -> None:
+    """SEC EDGAR pide un contacto real; avisa una vez si solo hay marcador."""
+    global _ua_warned
+    if _ua_warned or os.environ.get(_UA_ENV):
+        return
+    _ua_warned = True
+    print(
+        "Aviso: define STOCKLAB_SEC_UA con un contacto real para consultar SEC EDGAR.",
+        file=sys.stderr,
+    )
+
+
 def _polite_get(url: str) -> Any:
+    _warn_missing_ua()
     # SEC permite ~10 req/s; espaciamos para no abusar.
     with _polite_lock:
         wait = 0.13 - (time.time() - _last_call[0])

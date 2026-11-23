@@ -55,6 +55,18 @@ SQLite y no se redistribuyen. La app muestra la lista completa en
 
 Detalle: [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
 
+### Uso y condiciones
+
+- Proyecto educativo y de investigación personal. **No es asesoramiento financiero**
+  ni una recomendación de compra o venta.
+- Nasdaq y Yahoo se consultan mediante endpoints **no oficiales**. El uso debe ser
+  personal y moderado; revisa sus condiciones antes de automatizar o redistribuir.
+- **No se redistribuyen datos de mercado**: la base SQLite se genera en local y queda
+  fuera del repositorio. La licencia MIT cubre el código, no los datos de terceros.
+- SEC EDGAR exige identificarse. Define `STOCKLAB_SEC_UA` con un contacto real si vas
+  a consultarlo de forma intensiva; el valor por defecto es solo un marcador y la app
+  avisa por consola cuando falta.
+
 ## Validación
 
 El backtest se publica con resultado negativo incluido: a 63 sesiones el IC
