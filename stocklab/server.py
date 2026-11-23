@@ -52,6 +52,7 @@ ROUTES = {
     "/api/alerts/read": "alerts_read",
     "/api/portfolio": "portfolio_get",
     "/api/portfolio/add": "portfolio_add",
+    "/api/portfolio/update": "portfolio_update",
     "/api/portfolio/delete": "portfolio_delete",
     "/api/fundamentals/enrich": "fundamentals_enrich",
     "/api/backtest/start": "backtest_start",

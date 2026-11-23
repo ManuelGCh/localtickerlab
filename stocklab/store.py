@@ -827,15 +827,57 @@ def add_position(
         return int(cur.lastrowid)
 
 
+def get_position(position_id: int) -> dict[str, Any] | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM positions WHERE id = ?", (position_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def list_positions() -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute("SELECT * FROM positions ORDER BY id DESC").fetchall()
     return [dict(row) for row in rows]
 
 
+def update_position(
+    position_id: int,
+    symbol: str,
+    shares: float,
+    entry_price: float,
+    entry_date: str | None,
+    stop: float | None,
+    target: float | None,
+    note: str | None,
+) -> None:
+    with _write_lock, _connect() as conn:
+        conn.execute(
+            "UPDATE positions SET symbol=?, shares=?, entry_price=?, entry_date=?, "
+            "stop=?, target=?, note=? WHERE id=?",
+            (
+                symbol,
+                shares,
+                entry_price,
+                entry_date or now_ny().date().isoformat(),
+                stop,
+                target,
+                note or "",
+                position_id,
+            ),
+        )
+
+
 def delete_position(position_id: int) -> None:
     with _write_lock, _connect() as conn:
         conn.execute("DELETE FROM positions WHERE id = ?", (position_id,))
+
+
+def delete_alert_matching(symbol: str, kind: str, threshold: float) -> int:
+    with _write_lock, _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM alerts WHERE symbol=? AND kind=? AND threshold=?",
+            (symbol, kind, threshold),
+        )
+        return cur.rowcount
 
 
 def clear_failed_fetches() -> int:

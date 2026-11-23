@@ -52,8 +52,9 @@ python3 scripts/seed_demo.py --clear
   retornos, volatilidad y drawdown.
 - Columnas y filtros de **calidad, crecimiento, sorpresa de EPS y días hasta resultados**,
   con enriquecimiento por lotes del top 100/300/500.
-- Vista compacta por defecto con **selector de columnas** (se guarda en el navegador).
-- Exportación a CSV de todos los resultados (delimitador `;`, decimales con coma).
+- Vista compacta por defecto con **herramientas** para columnas, vistas y fundamentales.
+- Paginación de 100 filas, selección múltiple y acciones masivas: watchlist, comparador y CSV.
+- Exportación a CSV de todos los resultados o solo de la selección (delimitador `;`, decimales con coma).
 
 **Análisis individual**
 - Buscador con autocompletado sobre el catálogo local.
@@ -67,8 +68,8 @@ python3 scripts/seed_demo.py --clear
   (1M/3M/6M/1A/YTD), rango de 52 semanas y liquidez.
 
 **Watchlist**
-- Estrella en cualquier tabla o ficha; se guarda en `localStorage`.
-- Análisis conjunto de la watchlist con el mismo motor del screener.
+- Estrella en cualquier tabla o ficha; se guarda en SQLite, no en el navegador.
+- Tarjetas en móvil y análisis conjunto con el mismo motor del screener.
 
 **Fortaleza relativa y régimen**
 - Percentil de cada valor dentro del universo (puntuación, momento, tendencia).
@@ -84,10 +85,12 @@ python3 scripts/seed_demo.py --clear
 **Cartera y alertas**
 - Posiciones con P&L, peso, señal actual, **riesgo abierto (importe y %), múltiplo R**,
   distancia a stop/objetivo y **exposición por sector**.
+- **Curva de evolución** de la cartera frente a QQQ, reconstruida con efectivo y fechas de entrada.
+- Edición de posiciones sin borrar y volver a crear.
 - Calculadora de tamaño: capital y riesgo por operación → acciones sugeridas según entrada y stop.
 - El seguimiento (antes watchlist) está integrado en Cartera; ya no es una pestaña aparte.
-- Alertas de precio, RSI, cambio de señal y resultados próximos; eventos con aviso
-  del navegador y comprobación automática cada 10 minutos mientras el servidor esté activo.
+- Alertas de precio, RSI, puntuación, máximo de 52 semanas, volumen anómalo, cambio de
+  señal y resultados próximos; eventos con aviso del navegador; comprobación manual y tras el escaneo diario.
 
 **Backtest y calibración**
 - Validación walk-forward con 10 años de histórico (caché propia en `data/backtest.db`).
@@ -97,6 +100,7 @@ python3 scripts/seed_demo.py --clear
 - **Split in-sample / out-of-sample** (70/30) con IC, spread y acierto en cada periodo.
 - Diagnóstico de cada factor (directo e invertido) y calibración de pesos con
   aplicación en un clic.
+- Backtest cancelable y detalles avanzados plegados para no saturar la vista principal.
 
 ---
 
@@ -355,7 +359,7 @@ tests/                    pruebas con unittest
 | `GET /api/fundamentals/enrich?id=&limit=` | Enriquece el top de un screener con fundamentales |
 | `GET /api/news?symbol=` | Titulares, eventos y sentimiento |
 | `GET /api/alerts` · `/api/alerts/add` · `/api/alerts/check` | Alertas y eventos |
-| `GET /api/portfolio` · `/api/portfolio/add` | Cartera y P&L |
+| `GET /api/portfolio` · `/api/portfolio/add` · `/api/portfolio/update` | Cartera, P&L y edición |
 | `GET /api/watchlist` · `/api/watchlist/add` · `/api/watchlist/remove` | Watchlist persistente |
 | `GET /api/views` · `/api/views/save` · `/api/views/delete` | Vistas guardadas |
 | `GET /api/screen/start?universe=ndx&...` | Lanza (o reutiliza) un screener |

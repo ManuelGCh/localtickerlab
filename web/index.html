@@ -65,6 +65,13 @@
     </div>
 
     <h2 class="sr-only">Resultados del screener</h2>
+    <div class="panel onboard hidden" id="onboard">
+      <div class="onboard-copy">
+        <strong>Primera vez por aquí</strong>
+        <span>1. Elige NASDAQ-100 o Composite. 2. Pulsa <b>Actualizar</b>; la primera descarga tarda. 3. La calidad es contexto, no una señal: el edge se mide en el backtest.</span>
+      </div>
+      <button class="btn ghost" id="onboardClose">Entendido</button>
+    </div>
     <div class="panel controls">
       <div class="field">
         <label for="universe">Universo</label>
@@ -110,7 +117,7 @@
       </label>
       <div class="field field-actions">
         <button class="btn ghost" id="filtersBtn">Filtros</button>
-        <button class="btn primary" id="runScreen">Analizar</button>
+        <button class="btn primary" id="runScreen" title="Actualiza precios, señales y fundamentales del universo">Actualizar</button>
         <button class="btn ghost hidden" id="cancelScreen">Cancelar</button>
       </div>
       <p class="scan-note adv-field" id="scanNote"></p>
@@ -119,7 +126,7 @@
     <div class="panel progress-panel hidden" id="progressPanel">
       <div class="progress-top">
         <div>
-          <strong id="progressTitle">Analizando…</strong>
+          <strong id="progressTitle">Actualizando…</strong>
           <span class="muted" id="progressDetail"></span>
         </div>
         <div class="progress-pct" id="progressPct">0%</div>
@@ -155,34 +162,49 @@
           <option value="75">Calidad ≥ 75</option>
         </select>
         <div class="col-menu">
-          <button class="btn ghost" id="viewsBtn">Vistas</button>
-          <div class="col-panel hidden" id="viewsPanel"></div>
-        </div>
-        <div class="col-menu">
-          <button class="btn ghost" id="dataBtn">Fundamentales</button>
-          <div class="col-panel hidden" id="dataPanel">
-            <select id="enrichLimit" class="mini-select" aria-label="Número de valores a enriquecer">
-              <option value="100" selected>Top 100</option>
-              <option value="300">Top 300</option>
-              <option value="500">Top 500</option>
-            </select>
-            <button class="btn ghost" id="enrichBtn" title="Descarga resultados y calidad de los primeros valores">Enriquecer</button>
-            <span class="muted small" id="enrichInfo"></span>
+          <button class="btn ghost" id="toolsBtn" aria-expanded="false">Herramientas</button>
+          <div class="col-panel tools-panel hidden" id="toolsPanel">
+            <details class="tool-section" open>
+              <summary>Columnas</summary>
+              <div id="columnsPanel"></div>
+            </details>
+            <details class="tool-section">
+              <summary>Vistas guardadas</summary>
+              <div id="viewsPanel"></div>
+            </details>
+            <details class="tool-section">
+              <summary>Fundamentales</summary>
+              <div id="dataPanel">
+                <select id="enrichLimit" class="mini-select" aria-label="Número de valores a enriquecer">
+                  <option value="100" selected>Top 100</option>
+                  <option value="300">Top 300</option>
+                  <option value="500">Top 500</option>
+                </select>
+                <button class="btn ghost" id="enrichBtn" title="Descarga resultados y calidad de los primeros valores">Enriquecer</button>
+                <span class="muted small" id="enrichInfo"></span>
+              </div>
+            </details>
           </div>
-        </div>
-        <div class="col-menu">
-          <button class="btn ghost" id="columnsBtn" title="Mostrar u ocultar columnas">Columnas</button>
-          <div class="col-panel hidden" id="columnsPanel"></div>
         </div>
         <button class="btn ghost hidden" id="loadAll" title="Cargar todos los resultados">Ver todos</button>
         <button class="btn ghost" id="exportCsv" title="Descargar resultados en CSV">⬇ CSV</button>
         <div class="muted small" id="resultsCount"></div>
+        <span class="muted small" id="enrichStatus"></span>
+      </div>
+
+      <div class="bulk-bar hidden" id="bulkBar">
+        <strong id="bulkCount">0 seleccionados</strong>
+        <button class="btn ghost" id="bulkWatch">☆ Watchlist</button>
+        <button class="btn ghost" id="bulkCompare">Comparar</button>
+        <button class="btn ghost" id="bulkExport">⬇ CSV</button>
+        <button class="btn ghost" id="bulkClear">Quitar selección</button>
       </div>
 
       <div class="table-wrap" id="screenTableWrap">
         <table class="data-table" id="screenTable">
           <thead>
             <tr>
+              <th class="col-check"><input id="selectAllRows" type="checkbox" aria-label="Seleccionar filas visibles" /></th>
               <th class="col-rank">#</th>
               <th data-sort="symbol">Valor</th>
               <th data-sort="price" class="num" title="Último cierre disponible; no es precio en vivo">Precio</th>
@@ -209,10 +231,11 @@
         </table>
       </div>
       <div class="screen-cards" id="screenCards"></div>
+      <div class="pager hidden" id="screenPager"></div>
       <div class="empty" id="screenEmpty">
-        <div class="empty-icon">📊</div>
+        <div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19V5M4 19h16"/><path d="M7 15l3-4 3 2 4-6"/></svg></div>
         <h3>Aún no hay resultados</h3>
-        <p class="muted">Elige un universo y pulsa <strong>Analizar</strong>. La primera ejecución descarga los históricos y puede tardar; después queda en caché.</p>
+        <p class="muted">Elige un universo y pulsa <strong>Actualizar</strong>. La primera ejecución descarga los históricos y puede tardar; después queda en caché.</p>
       </div>
     </div>
 
@@ -245,7 +268,7 @@
     </div>
 
     <div class="empty" id="analyzeEmpty">
-      <div class="empty-icon">🔎</div>
+      <div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></div>
       <h3>Elige un valor</h3>
       <p class="muted">Escribe un símbolo arriba o pulsa uno de los accesos rápidos.</p>
       <button class="btn ghost" id="openCompareEmpty" style="margin-top:14px">Comparar valores</button>
@@ -550,27 +573,33 @@
         </div>
       </details>
 
-      <div class="bt-grid">
-        <div class="panel bt-panel">
-          <h3>Retorno por señal</h3>
-          <div class="table-wrap">
-            <table class="data-table" id="btBuckets">
-              <thead><tr><th>Señal</th><th class="num">N</th><th class="num">Retorno</th><th class="num">Exceso QQQ</th><th class="num">Acierto</th></tr></thead>
-              <tbody></tbody>
-            </table>
+      <details class="panel bt-panel diag" id="btDetailPanel">
+        <summary>Detalle del estudio: señales, deciles y objetivos</summary>
+        <div class="diag-body">
+          <div class="metric-grid" id="btExtraKpis" style="margin-bottom:16px"></div>
+          <div class="bt-grid">
+            <div class="panel bt-panel">
+              <h3>Retorno por señal</h3>
+              <div class="table-wrap">
+                <table class="data-table" id="btBuckets">
+                  <thead><tr><th>Señal</th><th class="num">N</th><th class="num">Retorno</th><th class="num">Exceso QQQ</th><th class="num">Acierto</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="panel bt-panel">
+              <h3>Deciles de puntuación</h3>
+              <div class="deciles" id="btDeciles"></div>
+            </div>
+          </div>
+
+          <div class="panel bt-panel">
+            <h3>Objetivos y acierto</h3>
+            <div class="metric-grid" id="btTargets"></div>
+            <p class="muted small" id="btTargetNote"></p>
           </div>
         </div>
-        <div class="panel bt-panel">
-          <h3>Deciles de puntuación</h3>
-          <div class="deciles" id="btDeciles"></div>
-        </div>
-      </div>
-
-      <div class="panel bt-panel">
-        <h3>Objetivos y acierto</h3>
-        <div class="metric-grid" id="btTargets"></div>
-        <p class="muted small" id="btTargetNote"></p>
-      </div>
+      </details>
 
       <details class="panel bt-panel diag" id="btCalibrationPanel">
         <summary>Calibración de pesos (diagnóstico)</summary>
@@ -611,6 +640,19 @@
     <div class="metric-grid hidden" id="pfTotalsExtra"></div>
     <button class="btn ghost hidden" id="pfMore" style="margin:8px 0 10px">Más métricas</button>
 
+    <div class="panel bt-panel hidden" id="pfHistoryPanel">
+      <div class="panel-head">
+        <h3>Evolución de la cartera</h3>
+        <span class="muted small" id="pfHistoryNote"></span>
+      </div>
+      <div class="chart-toolbar">
+        <div class="chart-title">
+          <span class="legend"><i class="lg" style="background:#34d399"></i>Cartera <i class="lg" style="background:#94a3b8"></i>QQQ</span>
+        </div>
+      </div>
+      <div class="chart-canvas-wrap" style="height:260px"><canvas id="pfChart" role="img" aria-label="Evolución de la cartera frente a QQQ"></canvas></div>
+    </div>
+
     <div class="subtabs" id="portfolioTabs">
       <button class="subtab is-active" data-ptab="positions">Posiciones</button>
       <button class="subtab" data-ptab="watch">Seguimiento</button>
@@ -638,8 +680,9 @@
           <tbody id="watchBody"></tbody>
         </table>
       </div>
+      <div class="stock-cards" id="watchCards"></div>
       <div class="empty" id="watchEmpty">
-        <div class="empty-icon">⭐</div>
+        <div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.7l5.9-.9z"/></svg></div>
         <h3>Sin valores en seguimiento</h3>
         <p class="muted">Abre un valor en <strong>Análisis</strong> y pulsa “☆ Watchlist”.</p>
       </div>
@@ -654,7 +697,9 @@
           <input id="pfPrice" type="number" step="any" min="0" placeholder="Entrada $" />
           <input id="pfStop" type="number" step="any" min="0" placeholder="Stop $" />
           <input id="pfTarget" type="number" step="any" min="0" placeholder="Objetivo $" />
+          <input id="pfDate" type="date" title="Fecha de entrada" aria-label="Fecha de entrada" />
           <button class="btn primary" id="pfAdd">Añadir</button>
+          <button class="btn ghost hidden" id="pfCancelEdit">Cancelar</button>
           <span class="muted small" id="pfSuggestion" style="align-self:center"></span>
         </div>
         <div class="table-wrap">
@@ -676,7 +721,7 @@
           <p class="muted small" id="pfCorrNote"></p>
         </div>
         <div class="empty" id="pfEmpty">
-          <div class="empty-icon">💼</div>
+          <div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="7.5" width="17" height="12" rx="2"/><path d="M9 7.5V6a2 2 0 012-2h2a2 2 0 012 2v1.5M3.5 12.5h17"/></svg></div>
           <h3>Sin posiciones</h3>
           <p class="muted">Añade una posición con ticker, acciones y precio de entrada.</p>
         </div>

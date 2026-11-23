@@ -1,6 +1,7 @@
 """Alertas y cartera: comprobación de condiciones y valoración de posiciones."""
 from __future__ import annotations
 
+import bisect
 import math
 from typing import Any
 
@@ -12,6 +13,10 @@ ALERT_KINDS = {
     "signal": "Señal igual a",
     "rsi_above": "RSI por encima de",
     "rsi_below": "RSI por debajo de",
+    "score_above": "Puntuación por encima de",
+    "score_below": "Puntuación por debajo de",
+    "high_52w": "A menos de (%) del máximo 52s",
+    "volume_spike": "Volumen relativo ≥ (x media)",
     "earnings_within": "Resultados en menos de (días)",
 }
 
@@ -53,6 +58,10 @@ def describe(alert: dict[str, Any]) -> str:
         return f"{alert['symbol']}: señal = {alert.get('label') or '—'}"
     if kind == "earnings_within":
         return f"{alert['symbol']}: resultados en ≤ {alert.get('threshold'):.0f} días"
+    if kind == "high_52w":
+        return f"{alert['symbol']}: a ≤ {alert.get('threshold'):.1f}% del máximo de 52s"
+    if kind == "volume_spike":
+        return f"{alert['symbol']}: volumen ≥ {alert.get('threshold'):.1f}x la media"
     return f"{alert['symbol']}: {ALERT_KINDS.get(kind, kind)} {alert.get('threshold')}"
 
 
@@ -89,6 +98,28 @@ def check_alerts(data: Any, fundamentals: Any | None = None) -> list[dict[str, A
         elif kind == "rsi_below" and row.get("rsi") is not None:
             hit = float(row["rsi"]) <= float(threshold or 0)
             message = f"{symbol}: RSI {row['rsi']:.0f} (≤ {threshold:.0f})"
+        elif kind in ("score_above", "score_below") and row.get("score") is not None:
+            score = float(row["score"])
+            if kind == "score_above":
+                hit = score >= float(threshold or 0)
+                message = f"{symbol}: puntuación {score:.0f} (≥ {threshold:.0f})"
+            else:
+                hit = score <= float(threshold or 0)
+                message = f"{symbol}: puntuación {score:.0f} (≤ {threshold:.0f})"
+        elif kind == "high_52w" and row.get("from_high") is not None:
+            distance = abs(float(row["from_high"])) * 100.0
+            hit = distance <= float(threshold or 0)
+            message = f"{symbol}: a {distance:.1f}% del máximo de 52s"
+        elif kind == "volume_spike":
+            ratio = row.get("volume_ratio")
+            if ratio is None:
+                try:
+                    ratio = analysis.compute_metrics(data.get_bars(symbol)).get("volume_ratio")
+                except (net.FetchError, ValueError, KeyError, TypeError):
+                    ratio = None
+            if ratio is not None:
+                hit = float(ratio) >= float(threshold or 0)
+                message = f"{symbol}: volumen {float(ratio):.1f}x la media"
         elif kind == "earnings_within" and fundamentals is not None:
             try:
                 payload = fundamentals.get(symbol)
@@ -202,6 +233,84 @@ def _risk_block(rows: list[dict[str, Any]], total_value: float) -> dict[str, Any
     }
 
 
+def _history(positions: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Evolución reconstruida: efectivo + posiciones desde su fecha de entrada."""
+    qqq = store.get_bars("QQQ")
+    if len(qqq) < 30:
+        return None
+    qdates = [bar["date"] for bar in qqq]
+    qcloses = {bar["date"]: float(bar["close"]) for bar in qqq}
+    parts = []
+    for position in positions:
+        bars = store.get_bars(position["symbol"])
+        if len(bars) < 5:
+            continue
+        dates = [bar["date"] for bar in bars]
+        closes = {bar["date"]: float(bar["close"]) for bar in bars}
+        entry = (
+            position.get("entry_date")
+            or (position.get("created_at") or "")[:10]
+            or dates[0]
+        )
+        index = bisect.bisect_left(dates, entry)
+        if index >= len(dates):
+            continue
+        parts.append(
+            {
+                "shares": float(position["shares"]),
+                "entry_price": float(position["entry_price"]),
+                "entry": dates[index],
+                "dates": dates,
+                "closes": closes,
+            }
+        )
+    if not parts:
+        return None
+    start = min(part["entry"] for part in parts)
+    dates = [date for date in qdates if date >= start]
+    if len(dates) < 5:
+        return None
+    total_cost = sum(part["shares"] * part["entry_price"] for part in parts)
+    if total_cost <= 0:
+        return None
+    values = []
+    for date in dates:
+        cash = total_cost
+        holdings = 0.0
+        for part in parts:
+            if part["entry"] > date:
+                continue
+            cost = part["shares"] * part["entry_price"]
+            cash -= cost
+            if date == part["entry"]:
+                price = part["entry_price"]
+            else:
+                index = bisect.bisect_right(part["dates"], date) - 1
+                price = (
+                    part["closes"][part["dates"][index]]
+                    if index >= 0
+                    else part["entry_price"]
+                )
+            holdings += part["shares"] * price
+        values.append(cash + holdings)
+    base = values[0] or total_cost
+    bench_base = qcloses[dates[0]]
+    if not bench_base:
+        return None
+    return {
+        "dates": dates,
+        "portfolio": [round(value / base * 100.0, 3) for value in values],
+        "benchmark": [
+            round(qcloses.get(date, bench_base) / bench_base * 100.0, 3)
+            for date in dates
+        ],
+        "start": dates[0],
+        "end": dates[-1],
+        "positions": len(parts),
+        "note": "Efectivo + posiciones actuales desde su fecha de entrada.",
+    }
+
+
 def portfolio_snapshot(data: Any) -> dict[str, Any]:
     positions = store.list_positions()
     rows: list[dict[str, Any]] = []
@@ -278,6 +387,7 @@ def portfolio_snapshot(data: Any) -> dict[str, Any]:
     rows.sort(key=lambda item: item["value"], reverse=True)
     return {
         "positions": rows,
+        "history": _history(positions),
         "risk": _risk_block(rows, total_value),
         "totals": {
             "value": total_value,

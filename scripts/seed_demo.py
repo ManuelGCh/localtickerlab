@@ -17,10 +17,10 @@ sys.path.insert(0, str(ROOT))
 from stocklab import store  # noqa: E402
 
 POSITIONS = [
-    ("AAPL", 10, 300.0, 280.0, 400.0, "Demostración"),
-    ("MSFT", 5, 450.0, 420.0, 550.0, "Demostración"),
-    ("NVDA", 4, 130.0, 115.0, 180.0, "Demostración"),
-    ("AMZN", 6, 200.0, 185.0, 260.0, "Demostración"),
+    ("AAPL", 10, 300.0, 280.0, 400.0, "2026-06-01", "Demostración"),
+    ("MSFT", 5, 450.0, 420.0, 550.0, "2026-07-01", "Demostración"),
+    ("NVDA", 4, 130.0, 115.0, 180.0, "2026-08-01", "Demostración"),
+    ("AMZN", 6, 200.0, 185.0, 260.0, "2026-09-01", "Demostración"),
 ]
 
 ALERTS = [
@@ -32,8 +32,8 @@ ALERTS = [
 
 def seed() -> None:
     store.init()
-    for symbol, shares, price, stop, target, note in POSITIONS:
-        store.add_position(symbol, shares, price, None, stop, target, note)
+    for symbol, shares, price, stop, target, entry_date, note in POSITIONS:
+        store.add_position(symbol, shares, price, entry_date, stop, target, note)
     for symbol, kind, threshold, label in ALERTS:
         if not store.has_alert(symbol, kind, threshold):
             store.add_alert(symbol, kind, threshold, label)

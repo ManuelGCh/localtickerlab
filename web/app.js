@@ -54,6 +54,7 @@
   }
 
   const DEFAULT_HIDDEN_COLS = [
+    "pct_score",
     "revenue_growth",
     "eps_surprise",
     "days_to_earnings",
@@ -76,12 +77,17 @@
     searchTotal: 0,
     searching: false,
     searchToken: 0,
+    page: 1,
+    pageSize: 100,
+    selected: new Set(),
+    visibleRows: [],
+    autoEnrich: false,
     signal: "",
     qualityMin: 0,
     noEarnings: false,
     enrichRunning: false,
     regime: {},
-    hiddenCols: storedArray("sl.hiddenCols.v3", [...DEFAULT_HIDDEN_COLS]).filter(
+    hiddenCols: storedArray("sl.hiddenCols.v4", [...DEFAULT_HIDDEN_COLS]).filter(
       (s) => typeof s === "string"
     ),
     views: storedArray("sl.views", []).filter((v) => v && typeof v === "object"),
@@ -112,6 +118,9 @@
     btChart: null,
     btResult: null,
     btCalibration: null,
+    pfChart: null,
+    pfPositions: [],
+    editingPositionId: null,
     fundToken: 0,
     newsToken: 0,
     fundamentals: null,
@@ -123,6 +132,10 @@
     signal: "Señal igual a",
     rsi_above: "RSI por encima de",
     rsi_below: "RSI por debajo de",
+    score_above: "Puntuación por encima de",
+    score_below: "Puntuación por debajo de",
+    high_52w: "A menos de (%) del máximo 52s",
+    volume_spike: "Volumen relativo ≥ (x media)",
     earnings_within: "Resultados en ≤ días",
   };
   const SIGNALS = ["COMPRA FUERTE", "COMPRA", "NEUTRAL", "VENTA", "VENTA FUERTE"];
@@ -240,7 +253,7 @@
     refreshWatchBadge();
     renderWatchlist();
     if (state.current) updateStarButton();
-    if ($("#viewsPanel") && !$("#viewsPanel").classList.contains("hidden")) {
+    if ($("#toolsPanel") && !$("#toolsPanel").classList.contains("hidden")) {
       renderViewsPanel();
     }
   }
@@ -256,6 +269,7 @@
     loadUserPrefs();
     loadStatus();
     restoreUniverse();
+    if (!store.get("sl.onboarded", false)) $("#onboard").classList.remove("hidden");
     refreshWatchBadge();
     updateScanNote();
     const initial = parseHash();
@@ -548,7 +562,9 @@
     state.hiddenCols = Array.isArray(config.hiddenCols)
       ? config.hiddenCols.filter((key) => typeof key === "string")
       : [...DEFAULT_HIDDEN_COLS];
-    store.set("sl.hiddenCols.v3", state.hiddenCols);
+    state.page = 1;
+    state.selected.clear();
+    store.set("sl.hiddenCols.v4", state.hiddenCols);
     store.set("sl.universe", state.universe);
     state.loadedAll = false;
     buildColumnPanel();
@@ -556,7 +572,7 @@
     updateScanNote();
     updateHash();
     renderScreenTable();
-    $("#viewsPanel").classList.add("hidden");
+    $("#toolsPanel").classList.add("hidden");
     loadLatest(universe);
   }
 
@@ -577,7 +593,7 @@
   function buildColumnPanel() {
     const panel = $("#columnsPanel");
     if (!panel) return;
-    store.set("sl.hiddenCols.v3", state.hiddenCols);
+    store.set("sl.hiddenCols.v4", state.hiddenCols);
     panel.innerHTML =
       Object.entries(OPTIONAL_COLUMNS)
         .map(
@@ -595,13 +611,13 @@
         } else if (!state.hiddenCols.includes(key)) {
           state.hiddenCols.push(key);
         }
-        store.set("sl.hiddenCols.v3", state.hiddenCols);
+        store.set("sl.hiddenCols.v4", state.hiddenCols);
         applyColumns();
       });
     });
     panel.querySelector("#resetColumns").addEventListener("click", () => {
       state.hiddenCols = [...DEFAULT_HIDDEN_COLS];
-      store.set("sl.hiddenCols.v3", state.hiddenCols);
+      store.set("sl.hiddenCols.v4", state.hiddenCols);
       buildColumnPanel();
       applyColumns();
     });
@@ -635,6 +651,10 @@
   }
 
   function wireScreen() {
+    $("#onboardClose").addEventListener("click", () => {
+      $("#onboard").classList.add("hidden");
+      store.set("sl.onboarded", true);
+    });
     $("#runScreen").addEventListener("click", () => startScreen(false));
     $("#filtersBtn").addEventListener("click", () => {
       const panel = $("#filtersBtn").closest(".controls");
@@ -650,18 +670,12 @@
         ? "Ocultar ▴"
         : "Detalle ▾";
     });
-    $("#dataBtn").addEventListener("click", (e) => {
+    $("#toolsBtn").addEventListener("click", (e) => {
       e.stopPropagation();
-      $("#columnsPanel").classList.add("hidden");
-      $("#viewsPanel").classList.add("hidden");
-      $("#dataPanel").classList.toggle("hidden");
-    });
-    $("#viewsBtn").addEventListener("click", (e) => {
-      e.stopPropagation();
-      $("#columnsPanel").classList.add("hidden");
-      $("#dataPanel").classList.add("hidden");
-      renderViewsPanel();
-      $("#viewsPanel").classList.toggle("hidden");
+      const panel = $("#toolsPanel");
+      panel.classList.toggle("hidden");
+      $("#toolsBtn").setAttribute("aria-expanded", panel.classList.contains("hidden") ? "false" : "true");
+      if (!panel.classList.contains("hidden")) renderViewsPanel();
     });
     $("#scanAll").addEventListener("click", () => {
       $("#universe").value = "all";
@@ -681,17 +695,10 @@
     $("#cancelScreen").addEventListener("click", cancelScreen);
     let searchTimer = null;
     buildColumnPanel();
-    $("#columnsBtn").addEventListener("click", (e) => {
-      e.stopPropagation();
-      $("#dataPanel").classList.add("hidden");
-      $("#viewsPanel").classList.add("hidden");
-      $("#columnsPanel").classList.toggle("hidden");
-    });
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".col-menu")) {
-        $("#columnsPanel").classList.add("hidden");
-        $("#dataPanel").classList.add("hidden");
-        $("#viewsPanel").classList.add("hidden");
+        $("#toolsPanel").classList.add("hidden");
+        $("#toolsBtn").setAttribute("aria-expanded", "false");
       }
     });
 
@@ -701,6 +708,7 @@
       searchTimer = setTimeout(async () => {
         state.search = raw.toLowerCase();
         state.searchRaw = raw;
+        state.page = 1;
         state.sortTouched = false;
         state.searchResults = null;
         state.searchTotal = 0;
@@ -708,6 +716,7 @@
           raw.length > 0 && state.jobId && state.screenTotal > state.rows.length;
         if (needServer) {
           state.searching = true;
+          state.page = 1;
           renderScreenTable();
           const token = ++state.searchToken;
           try {
@@ -726,8 +735,18 @@
       }, 220);
     });
     $("#screenCards").addEventListener("click", (ev) => {
+      if (ev.target.closest("input")) return;
       const card = ev.target.closest("[data-card-symbol]");
       if (card) openSymbol(card.dataset.cardSymbol);
+    });
+    $("#screenCards").addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      if (ev.target.closest("input,button")) return;
+      const card = ev.target.closest("[data-card-symbol]");
+      if (card) {
+        ev.preventDefault();
+        openSymbol(card.dataset.cardSymbol);
+      }
     });
     $("#screenBody").addEventListener("click", (ev) => {
       const el = ev.target.closest("[data-action]");
@@ -741,17 +760,51 @@
         openSymbol(symbol);
       }
     });
+    $("#screenBody").addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      const el = ev.target.closest("[data-action]");
+      if (!el) return;
+      ev.preventDefault();
+      openSymbol(el.dataset.symbol);
+    });
+    document.addEventListener("change", (ev) => {
+      const box = ev.target.closest(".row-check, .card-check");
+      if (!box) return;
+      if (box.checked) state.selected.add(box.dataset.symbol);
+      else state.selected.delete(box.dataset.symbol);
+      syncSelectionUi();
+    });
+    $("#selectAllRows").addEventListener("change", (ev) => {
+      for (const row of state.visibleRows || []) {
+        if (ev.target.checked) state.selected.add(row.symbol);
+        else state.selected.delete(row.symbol);
+      }
+      syncSelectionUi();
+    });
+    $("#bulkWatch").addEventListener("click", bulkWatchlist);
+    $("#bulkCompare").addEventListener("click", bulkCompare);
+    $("#bulkExport").addEventListener("click", bulkExport);
+    $("#bulkClear").addEventListener("click", clearSelection);
+    $("#screenPager").addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-page]");
+      if (!btn) return;
+      if (btn.dataset.page === "prev") setPage(Math.max(1, state.page - 1));
+      if (btn.dataset.page === "next") setPage(state.page + 1);
+    });
     $("#signalFilter").addEventListener("change", (e) => {
       state.signal = e.target.value;
+      state.page = 1;
       updateHash();
       renderScreenTable();
     });
     $("#qualityFilter").addEventListener("change", (e) => {
       state.qualityMin = Number(e.target.value) || 0;
+      state.page = 1;
       renderScreenTable();
     });
     $("#noEarnings").addEventListener("change", (e) => {
       state.noEarnings = e.target.checked;
+      state.page = 1;
       renderScreenTable();
     });
     $("#enrichBtn").addEventListener("click", enrichFundamentals);
@@ -768,6 +821,7 @@
         if (state.sort.key === key) state.sort.dir *= -1;
         else state.sort = { key, dir: key === "symbol" ? 1 : -1 };
         state.sortTouched = true;
+        state.page = 1;
         renderScreenTable();
       });
     });
@@ -815,11 +869,14 @@
 
   async function loadLatest(universeArg, autoStart = false) {
     const token = (state.latestToken = (state.latestToken || 0) + 1);
+    state.page = 1;
+    state.selected.clear();
     if (await resumeScreen(token)) return;
     if (token !== state.latestToken) return;
     state.enrichRunning = false;
     $("#enrichBtn").disabled = false;
     $("#enrichInfo").textContent = "";
+    $("#enrichStatus").textContent = "";
     $("#runScreen").disabled = false;
     $("#cancelScreen").classList.add("hidden");
     $("#progressPanel").classList.add("hidden");
@@ -904,16 +961,22 @@
     if (universe === "watchlist") params.symbols = state.watchlist.join(",");
 
     $("#runScreen").disabled = true;
+    state.page = 1;
+    state.selected.clear();
+    state.autoEnrich = true;
     clearTimeout(state.hideProgressTimer);
     state.hideProgressTimer = null;
     try {
       const job = await api("/api/screen/start", params);
       store.set("sl.screenJob", job.id);
       if (universe !== state.universe) {
+        state.autoEnrich = false;
         $("#runScreen").disabled = false;
         return;
       }
       state.jobId = job.id;
+      $("#onboard").classList.add("hidden");
+      store.set("sl.onboarded", true);
       state.loadedAll = false;
       state.search = "";
       state.searchRaw = "";
@@ -933,6 +996,7 @@
       renderScreenTable();
       pollScreen();
     } catch (e) {
+      state.autoEnrich = false;
       $("#runScreen").disabled = false;
       showScreenError(e.message);
     }
@@ -971,8 +1035,10 @@
           $("#cancelScreen").classList.add("hidden");
           hideProgressSoon();
           loadStatus();
+          if (job.status === "done") maybeAutoEnrich();
           if (job.status === "error") showScreenError(job.error || "Error durante el análisis");
           if (job.status === "cancelled") {
+            state.autoEnrich = false;
             $("#progressTitle").textContent = "Análisis cancelado";
           }
         }
@@ -991,6 +1057,14 @@
     state.pollTimer = setTimeout(tick, 400);
   }
 
+  function maybeAutoEnrich() {
+    if (!state.autoEnrich) return;
+    state.autoEnrich = false;
+    if (state.enrichRunning || !state.jobId) return;
+    const pending = state.rows.filter((row) => !isEnriched(row)).length;
+    if (pending) enrichFundamentals();
+  }
+
   function showProgress(job) {
     clearTimeout(state.hideProgressTimer);
     state.hideProgressTimer = null;
@@ -1006,7 +1080,7 @@
       watchlist: "watchlist",
     }[job.universe] || job.universe;
     $("#progressTitle").textContent =
-      job.status === "running" ? `Analizando ${label}…` : `Análisis ${job.status === "done" ? "completado" : job.status}`;
+      job.status === "running" ? `Actualizando ${label}…` : `Actualización ${job.status === "done" ? "completada" : job.status}`;
     $("#progressDetail").textContent = `${nf0.format(job.done)} / ${nf0.format(job.total)} valores` + (job.errors ? ` · ${job.errors} errores` : "");
     const parts = [];
     if (job.status === "running") {
@@ -1060,6 +1134,7 @@
       if (data.rows && data.rows.length) {
         state.rows = data.rows;
         state.loadedAll = true;
+        state.page = 1;
         renderScreenTable();
         $("#loadAll").classList.add("hidden");
       }
@@ -1077,19 +1152,12 @@
   function renderScreenCards(rows) {
     const box = $("#screenCards");
     if (!box) return;
-    const limit = 150;
-    const mobileRows = state.search ? rows : rows.slice(0, limit);
-    const note =
-      rows.length > mobileRows.length
-        ? `<div class="muted small" style="padding:4px 2px">Mostrando ${limit} de ${nf0.format(rows.length)}. Usa la búsqueda o los filtros para acotar.</div>`
-        : "";
-    box.innerHTML =
-      note +
-      mobileRows
+    box.innerHTML = rows
       .map((row) => {
         const change = row.change_pct;
         return `<div class="stock-card" data-card-symbol="${escapeAttr(row.symbol)}">
           <div class="stock-card-head">
+            <input class="card-check" type="checkbox" data-symbol="${escapeAttr(row.symbol)}" ${state.selected.has(row.symbol) ? "checked" : ""} aria-label="Seleccionar ${escapeAttr(row.symbol)}" />
             <div class="stock-card-id">
               <strong>${escapeHtml(row.symbol)}</strong>
               <span>${escapeHtml(row.name || "")}</span>
@@ -1107,7 +1175,7 @@
             <span class="tag ${(row.upside_3m || 0) >= 0 ? "pos" : "neg"}">${fmt.pct(row.upside_3m, 1)}</span>
           </div>
           <div class="stock-card-foot">
-            <span class="muted small">Toca para analizar</span>
+            <button class="link-btn" data-card-symbol="${escapeAttr(row.symbol)}">Analizar</button>
           </div>
         </div>`;
       })
@@ -1150,9 +1218,11 @@
       return;
     }
     const pending = state.rows.filter((r) => !isEnriched(r)).length;
-    $("#enrichInfo").textContent = pending
+    const text = pending
       ? `${nf0.format(pending)} filas sin fundamentales`
       : "";
+    $("#enrichInfo").textContent = text;
+    $("#enrichStatus").textContent = "";
   }
 
   async function enrichFundamentals() {
@@ -1178,14 +1248,17 @@
   function updateEnrichInfo(job) {
     if (!job || !job.enrich_total) {
       $("#enrichInfo").textContent = "";
+      $("#enrichStatus").textContent = "";
       return;
     }
     const pct = Math.round((job.enrich_done / job.enrich_total) * 100);
     state.enrichRunning = job.enrich_status === "running";
-    $("#enrichInfo").textContent =
+    const text =
       job.enrich_status === "running"
         ? `fundamentales ${job.enrich_done}/${job.enrich_total} (${pct}%)`
         : `fundamentales ${job.enrich_done}/${job.enrich_total}`;
+    $("#enrichInfo").textContent = text;
+    $("#enrichStatus").textContent = job.enrich_status === "running" ? text : "";
   }
 
   function pollEnrichment(wasLoadedAll) {
@@ -1326,6 +1399,14 @@
       }
     });
 
+    const total = rows.length;
+    const pages = Math.max(1, Math.ceil(total / state.pageSize));
+    if (state.page > pages) state.page = pages;
+    if (state.page < 1) state.page = 1;
+    const startIndex = (state.page - 1) * state.pageSize;
+    const pageRows = rows.slice(startIndex, startIndex + state.pageSize);
+    state.visibleRows = pageRows;
+
     const asOfDates = [...new Set(rows.map((row) => row.as_of).filter(Boolean))].sort();
     const asOfText = asOfDates.length
       ? ` · cierre ${
@@ -1371,22 +1452,24 @@
     } else {
       emptyTitle.textContent = "Aún no hay resultados";
       emptyText.textContent =
-        "Elige un universo y pulsa Analizar. La primera ejecución descarga los históricos y puede tardar; después queda en caché.";
+        "Elige un universo y pulsa Actualizar. La primera ejecución descarga los históricos y puede tardar; después queda en caché.";
     }
     empty.classList.toggle("hidden", rows.length > 0);
     table.classList.toggle("hidden", rows.length === 0);
     updateEnrichHint();
     renderRegime();
 
-    body.innerHTML = rows
+    body.innerHTML = pageRows
       .map((r, i) => {
+        const rank = startIndex + i;
         const sub = r.subscores || {};
         const chgClass =
           r.change_pct == null ? "neutral" : r.change_pct >= 0 ? "pos" : "neg";
         return `<tr data-symbol="${escapeAttr(r.symbol)}">
-          <td class="col-rank"><span class="rank-badge ${i < 3 ? "top" : ""}">${i + 1}</span></td>
+          <td class="col-check"><input class="row-check" type="checkbox" data-symbol="${escapeAttr(r.symbol)}" ${state.selected.has(r.symbol) ? "checked" : ""} aria-label="Seleccionar ${escapeAttr(r.symbol)}" /></td>
+          <td class="col-rank"><span class="rank-badge ${rank < 3 ? "top" : ""}">${rank + 1}</span></td>
           <td>
-            <div class="sym-cell" data-action="analyze" data-symbol="${escapeAttr(r.symbol)}">
+            <div class="sym-cell" data-action="analyze" data-symbol="${escapeAttr(r.symbol)}" role="button" tabindex="0">
               <strong>${escapeHtml(r.symbol)}</strong>
               <span title="${escapeAttr(r.name || "")}">${escapeHtml(r.name || r.sector || "")}</span>
             </div>
@@ -1422,7 +1505,106 @@
       .join("");
 
     applyColumns();
-    renderScreenCards(rows);
+    renderScreenCards(pageRows);
+    renderPager(total);
+    updateBulkBar();
+    const selectAll = $("#selectAllRows");
+    if (selectAll) {
+      const selectedOnPage = pageRows.filter((row) => state.selected.has(row.symbol)).length;
+      selectAll.checked = pageRows.length > 0 && selectedOnPage === pageRows.length;
+      selectAll.indeterminate = selectedOnPage > 0 && selectedOnPage < pageRows.length;
+      selectAll.disabled = pageRows.length === 0;
+    }
+  }
+
+  function renderPager(total) {
+    const pager = $("#screenPager");
+    if (!pager) return;
+    const pages = Math.max(1, Math.ceil(total / state.pageSize));
+    if (total <= state.pageSize) {
+      pager.classList.add("hidden");
+      pager.innerHTML = "";
+      return;
+    }
+    const start = (state.page - 1) * state.pageSize + 1;
+    const end = Math.min(total, state.page * state.pageSize);
+    pager.classList.remove("hidden");
+    pager.innerHTML = `
+      <button class="btn ghost" data-page="prev" ${state.page <= 1 ? "disabled" : ""}>‹ Anterior</button>
+      <span>${start}–${end} de ${nf0.format(total)} · página ${state.page}/${pages}</span>
+      <button class="btn ghost" data-page="next" ${state.page >= pages ? "disabled" : ""}>Siguiente ›</button>`;
+  }
+
+  function updateBulkBar() {
+    const bar = $("#bulkBar");
+    if (!bar) return;
+    const count = state.selected.size;
+    bar.classList.toggle("hidden", count === 0);
+    $("#bulkCount").textContent = `${count} ${count === 1 ? "seleccionado" : "seleccionados"}`;
+  }
+
+  function setPage(page) {
+    state.page = page;
+    renderScreenTable();
+  }
+
+  function syncSelectionUi() {
+    $$("#screenBody .row-check, #screenCards .card-check").forEach((box) => {
+      box.checked = state.selected.has(box.dataset.symbol);
+    });
+    const selectAll = $("#selectAllRows");
+    if (selectAll) {
+      const visible = state.visibleRows || [];
+      const count = visible.filter((row) => state.selected.has(row.symbol)).length;
+      selectAll.checked = visible.length > 0 && count === visible.length;
+      selectAll.indeterminate = count > 0 && count < visible.length;
+    }
+    updateBulkBar();
+  }
+
+  function clearSelection() {
+    state.selected.clear();
+    syncSelectionUi();
+  }
+
+  async function bulkWatchlist() {
+    if (!state.selected.size) return;
+    const symbols = [...new Set([...state.watchlist, ...state.selected])];
+    try {
+      const data = await api("/api/watchlist/replace", { symbols: symbols.join(",") });
+      if (Array.isArray(data.symbols)) {
+        state.watchlist = data.symbols;
+        store.set("sl.watchlist", state.watchlist);
+        refreshWatchBadge();
+        updateStarButton();
+        renderWatchlist();
+      }
+      clearSelection();
+    } catch (e) {
+      window.alert(e.message);
+    }
+  }
+
+  function bulkCompare() {
+    const symbols = [...state.selected].slice(0, 4);
+    if (symbols.length < 2) {
+      window.alert("Selecciona al menos dos valores para comparar.");
+      return;
+    }
+    setTab("analyze");
+    $("#analyzeEmpty").classList.add("hidden");
+    $("#analyzeContent").classList.remove("hidden");
+    $("#analyzeContent").classList.add("compare-only");
+    $("#compareBack").classList.remove("hidden");
+    setAnalyzeTab("comparar");
+    $("#compareInput").value = symbols.join(",");
+    compareStocks();
+  }
+
+  function bulkExport() {
+    if (!state.selected.size) return;
+    const query = state.jobId ? `id=${encodeURIComponent(state.jobId)}` : `universe=${encodeURIComponent(state.universe)}`;
+    window.location.href = `/api/screen/export?${query}&symbols=${encodeURIComponent([...state.selected].join(","))}`;
   }
 
   /* ================= ANÁLISIS ================= */
@@ -1636,7 +1818,7 @@
       }
       box.innerHTML = data.items
         .map(
-          (item) => `<div class="suggestion" data-symbol="${escapeAttr(item.symbol)}">
+          (item) => `<div class="suggestion" data-symbol="${escapeAttr(item.symbol)}" role="button" tabindex="0">
             <strong>${escapeHtml(item.symbol)}</strong>
             <span>${escapeHtml(item.name || "")}</span>
           </div>`
@@ -1644,10 +1826,17 @@
         .join("");
       box.classList.remove("hidden");
       box.querySelectorAll(".suggestion").forEach((el) => {
-        el.addEventListener("click", () => {
+        const run = () => {
           $("#symbolSearch").value = el.dataset.symbol;
           hideSuggestions();
           analyze(el.dataset.symbol);
+        };
+        el.addEventListener("click", run);
+        el.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            run();
+          }
         });
       });
     } catch (e) {
@@ -2185,16 +2374,62 @@
 
   async function renderWatchlist() {
     const body = $("#watchBody");
+    const cards = $("#watchCards");
     const empty = $("#watchEmpty");
     const table = $("#watchTable");
     if (!state.watchlist.length) {
       body.innerHTML = "";
+      if (cards) cards.innerHTML = "";
       empty.classList.remove("hidden");
       table.classList.add("hidden");
       return;
     }
     empty.classList.add("hidden");
     table.classList.remove("hidden");
+    if (cards) {
+      cards.innerHTML = state.watchlist
+        .map((sym) => {
+          const r = state.watchRows[sym];
+          if (!r) {
+            return `<div class="stock-card"><div class="stock-card-head"><div class="stock-card-id"><strong>${escapeHtml(sym)}</strong><span>cargando…</span></div></div></div>`;
+          }
+          const m = r.metrics || {};
+          const sc = (r.scores || {}).composite || 0;
+          return `<div class="stock-card" data-watch-card="${escapeAttr(sym)}">
+            <div class="stock-card-head">
+              <div class="stock-card-id"><strong>${escapeHtml(sym)}</strong><span>${escapeHtml(r.name || "")}</span></div>
+              <div class="stock-card-price"><strong>${fmt.price(m.price)}</strong><span class="${m.change_pct == null ? "neutral" : m.change_pct >= 0 ? "pos" : "neg"}">${fmt.pct(m.change_pct)}</span></div>
+            </div>
+            <div class="stock-card-tags">
+              ${actionBadge((r.evaluation || {}).action)}
+              <span class="tag">${Math.round(sc)}/100</span>
+              <span class="tag ${(m.ret_1m || 0) >= 0 ? "pos" : "neg"}">1M ${fmt.pct(m.ret_1m, 1)}</span>
+              <span class="tag ${(m.ret_3m || 0) >= 0 ? "pos" : "neg"}">3M ${fmt.pct(m.ret_3m, 1)}</span>
+              <span class="tag">RSI ${m.rsi != null ? m.rsi.toFixed(0) : "—"}</span>
+            </div>
+            <div class="stock-card-foot">
+              <button class="link-btn" data-watch-analyze="${escapeAttr(sym)}">Analizar</button>
+              <button class="icon-btn starred" data-watch-unstar="${escapeAttr(sym)}" title="Quitar de watchlist">★</button>
+            </div>
+          </div>`;
+        })
+        .join("");
+      cards.onclick = (event) => {
+        if (event.target.closest("button")) {
+          const analyze = event.target.closest("[data-watch-analyze]");
+          const unstar = event.target.closest("[data-watch-unstar]");
+          if (analyze) openSymbol(analyze.dataset.watchAnalyze);
+          if (unstar) {
+            toggleWatch(unstar.dataset.watchUnstar);
+            delete state.watchRows[unstar.dataset.watchUnstar];
+            renderWatchlist();
+          }
+          return;
+        }
+        const card = event.target.closest("[data-watch-card]");
+        if (card) openSymbol(card.dataset.watchCard);
+      };
+    }
     body.innerHTML = state.watchlist
       .map((sym) => {
         const r = state.watchRows[sym];
@@ -2269,7 +2504,8 @@
       $(selector).addEventListener("input", updateSuggestion);
     });
     updateSuggestion();
-    $("#pfAdd").addEventListener("click", addPosition);
+    $("#pfAdd").addEventListener("click", savePosition);
+    $("#pfCancelEdit").addEventListener("click", resetPositionForm);
     $("#alAdd").addEventListener("click", addAlert);
     $("#pfCapital").addEventListener("change", () => {
       state.capital = Number($("#pfCapital").value) || 0;
@@ -2322,14 +2558,18 @@
     $("#checkAlerts").addEventListener("click", checkAlerts);
     $("#markRead").addEventListener("click", markAlertsRead);
     $("#pfTable").addEventListener("click", (event) => {
-      const btn = event.target.closest("[data-pf-delete]");
-      if (btn) deletePosition(btn.dataset.pfDelete);
+      const edit = event.target.closest("[data-pf-edit]");
+      const del = event.target.closest("[data-pf-delete]");
+      if (edit) startEditPosition(Number(edit.dataset.pfEdit));
+      if (del) deletePosition(Number(del.dataset.pfDelete));
     });
     const pfCards = $("#pfCards");
     if (pfCards) {
       pfCards.addEventListener("click", (event) => {
-        const btn = event.target.closest("[data-pf-delete]");
-        if (btn) deletePosition(btn.dataset.pfDelete);
+        const edit = event.target.closest("[data-pf-edit]");
+        const del = event.target.closest("[data-pf-delete]");
+        if (edit) startEditPosition(Number(edit.dataset.pfEdit));
+        if (del) deletePosition(Number(del.dataset.pfDelete));
       });
     }
     const pfMore = $("#pfMore");
@@ -2365,6 +2605,18 @@
     const kind = $("#alKind").value;
     $("#alSignal").classList.toggle("hidden", kind !== "signal");
     $("#alValue").classList.toggle("hidden", kind === "signal");
+    const hints = {
+      price_above: "Precio $",
+      price_below: "Precio $",
+      rsi_above: "RSI 0-100",
+      rsi_below: "RSI 0-100",
+      score_above: "Puntuación 0-100",
+      score_below: "Puntuación 0-100",
+      high_52w: "% del máximo (ej. 2)",
+      volume_spike: "Veces la media (ej. 2)",
+      earnings_within: "Días",
+    };
+    $("#alValue").placeholder = hints[kind] || "Valor";
   }
 
   function updateSuggestion() {
@@ -2447,6 +2699,24 @@
     }
 
     const positions = data.positions || [];
+    state.pfPositions = positions;
+    const history = data.history;
+    const historyPanel = $("#pfHistoryPanel");
+    if (history && history.dates && history.dates.length > 1) {
+      historyPanel.classList.remove("hidden");
+      $("#pfHistoryNote").textContent = `Desde ${fmt.date(history.start)} · ${history.note}`;
+      if (!state.pfChart) state.pfChart = new LineChart($("#pfChart"));
+      state.pfChart.setData({
+        dates: history.dates,
+        series: [
+          { name: "Cartera", color: "#34d399", values: history.portfolio },
+          { name: "QQQ", color: "#94a3b8", values: history.benchmark },
+        ],
+      });
+      requestAnimationFrame(() => state.pfChart.resize());
+    } else {
+      historyPanel.classList.add("hidden");
+    }
     $("#pfEmpty").classList.toggle("hidden", positions.length > 0);
     $("#pfTable").classList.toggle("hidden", positions.length === 0);
     const pfCards = $("#pfCards");
@@ -2467,7 +2737,10 @@
             </div>
             <div class="stock-card-foot">
               <span class="muted small">${p.risk_amount != null ? "Riesgo " + fmt.money(p.risk_amount) : ""}</span>
-              <button class="icon-btn" data-pf-delete="${p.id}" title="Eliminar">✕</button>
+              <span>
+                <button class="icon-btn" data-pf-edit="${p.id}" title="Editar">✎</button>
+                <button class="icon-btn" data-pf-delete="${p.id}" title="Eliminar">✕</button>
+              </span>
             </div>
           </div>`
         )
@@ -2488,7 +2761,10 @@
           <td class="num">${p.r_multiple != null ? p.r_multiple.toFixed(2) + "R" : "—"}</td>
           <td class="num">${p.stop ? fmt.price(p.stop) : "—"}</td>
           <td class="num">${p.target ? fmt.price(p.target) : "—"}</td>
-          <td><button class="icon-btn" data-pf-delete="${p.id}" title="Eliminar">✕</button></td>
+          <td>
+            <button class="icon-btn" data-pf-edit="${p.id}" title="Editar">✎</button>
+            <button class="icon-btn" data-pf-delete="${p.id}" title="Eliminar">✕</button>
+          </td>
         </tr>`
       )
       .join("");
@@ -2609,26 +2885,57 @@
   function alertDescription(alert) {
     if (alert.kind === "signal") return `${alert.symbol}: señal = ${alert.label || "—"}`;
     if (alert.kind === "earnings_within") return `${alert.symbol}: resultados en ≤ ${alert.threshold} días`;
+    if (alert.kind === "high_52w") return `${alert.symbol}: a ≤ ${Number(alert.threshold).toFixed(1)}% del máximo de 52s`;
+    if (alert.kind === "volume_spike") return `${alert.symbol}: volumen ≥ ${Number(alert.threshold).toFixed(1)}x la media`;
     return `${alert.symbol}: ${ALERT_KINDS[alert.kind] || alert.kind} ${alert.threshold}`;
   }
 
-  async function addPosition() {
+  function resetPositionForm() {
+    ["#pfSymbol", "#pfShares", "#pfPrice", "#pfStop", "#pfTarget", "#pfDate"].forEach(
+      (id) => ($(id).value = "")
+    );
+    state.editingPositionId = null;
+    $("#pfAdd").textContent = "Añadir";
+    $("#pfCancelEdit").classList.add("hidden");
+    updateSuggestion();
+  }
+
+  function startEditPosition(id) {
+    const position = state.pfPositions.find((item) => item.id === id);
+    if (!position) return;
+    state.editingPositionId = id;
+    $("#pfSymbol").value = position.symbol;
+    $("#pfShares").value = position.shares;
+    $("#pfPrice").value = position.entry_price;
+    $("#pfStop").value = position.stop || "";
+    $("#pfTarget").value = position.target || "";
+    $("#pfDate").value = position.entry_date || "";
+    $("#pfAdd").textContent = "Guardar";
+    $("#pfCancelEdit").classList.remove("hidden");
+    updateSuggestion();
+    $("#pfSymbol").focus();
+  }
+
+  async function savePosition() {
     const symbol = $("#pfSymbol").value.trim().toUpperCase();
     const shares = Number($("#pfShares").value);
     const price = Number($("#pfPrice").value);
     if (!symbol || !(shares > 0) || !(price > 0)) return;
+    const params = {
+      symbol,
+      shares,
+      price,
+      stop: $("#pfStop").value || "",
+      target: $("#pfTarget").value || "",
+      date: $("#pfDate").value || "",
+    };
     try {
-      await api("/api/portfolio/add", {
-        symbol,
-        shares,
-        price,
-        stop: $("#pfStop").value || "",
-        target: $("#pfTarget").value || "",
-      });
-      ["#pfSymbol", "#pfShares", "#pfPrice", "#pfStop", "#pfTarget"].forEach(
-        (id) => ($(id).value = "")
-      );
-      updateSuggestion();
+      if (state.editingPositionId) {
+        await api("/api/portfolio/update", { ...params, id: state.editingPositionId });
+      } else {
+        await api("/api/portfolio/add", params);
+      }
+      resetPositionForm();
       loadPortfolio();
     } catch (e) {
       window.alert(e.message);
@@ -2639,6 +2946,7 @@
     if (!window.confirm("¿Eliminar esta posición?")) return;
     try {
       await api("/api/portfolio/delete", { id });
+      if (state.editingPositionId === id) resetPositionForm();
       loadPortfolio();
     } catch (e) {
       window.alert(e.message);
@@ -2922,8 +3230,9 @@
       card("Acierto compras", fmt.pct(buyHit, 1), "periodos positivos"),
       card("Objetivo antes de stop", fmt.pct(t.hit_rate, 1), `${nf0.format(t.evaluated || 0)} señales`),
     ];
+    const extra = [];
     if (r.quality) {
-      cards.push(
+      extra.push(
         card(
           "IC calidad SEC",
           r.quality.ic != null ? r.quality.ic.toFixed(3) : "—",
@@ -2931,7 +3240,7 @@
         )
       );
     }
-    cards.push(
+    extra.push(
       card(
         "Cartera in-sample",
         fmt.pct(p.total, 1),
@@ -2941,6 +3250,7 @@
       card("Máx. caída in-sample", fmt.pct(-(p.max_drawdown || 0), 1), `QQQ ${fmt.pct(-(p.bench_max_drawdown || 0), 1)}`, "neg")
     );
     $("#btKpis").innerHTML = cards.join("");
+    $("#btExtraKpis").innerHTML = extra.join("");
 
     $("#btCoverage").textContent = r.coverage
       ? `${r.coverage.symbols} valores · ${r.coverage.dates} fechas · ${fmt.date(r.coverage.start)} → ${fmt.date(r.coverage.end)}`

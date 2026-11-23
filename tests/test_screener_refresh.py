@@ -9,6 +9,7 @@ from unittest import mock
 from zoneinfo import ZoneInfo
 
 from stocklab import config, store
+from stocklab import portfolio
 from stocklab.screener import ScreenerService
 
 NY = ZoneInfo("America/New_York")
@@ -93,6 +94,28 @@ class TestScreenerRefresh(unittest.TestCase):
         again = store.acquire_scan_lock()
         self.assertIsNotNone(again)
         store.release_scan_lock(again)
+
+    def test_position_update_and_history(self):
+        for i in range(30):
+            date = (dt.date(2026, 6, 1) + dt.timedelta(days=i)).isoformat()
+            store.upsert_bars(
+                "QQQ",
+                [{"date": date, "open": 100 + i, "high": 101 + i, "low": 99 + i,
+                  "close": 100 + i, "volume": 1000}],
+            )
+            store.upsert_bars(
+                "AAPL",
+                [{"date": date, "open": 10 + i, "high": 11 + i, "low": 9 + i,
+                  "close": 10 + i, "volume": 1000}],
+            )
+        position_id = store.add_position("AAPL", 10, 10.0, "2026-06-01", 8.0, 15.0, "")
+        store.update_position(position_id, "AAPL", 12, 10.5, "2026-06-01", 8.5, 16.0, "")
+        updated = store.get_position(position_id)
+        self.assertEqual(updated["shares"], 12)
+        self.assertEqual(updated["stop"], 8.5)
+        history = portfolio._history(store.list_positions())
+        self.assertEqual(history["portfolio"][0], 100.0)
+        self.assertEqual(len(history["dates"]), 30)
 
     def test_watchlist_and_views_roundtrip(self):
         store.add_watch("msft")

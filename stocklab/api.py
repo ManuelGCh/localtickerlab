@@ -238,7 +238,10 @@ class Api:
         job = self.screener.get(job_id)
         if not job:
             raise ApiError("trabajo no encontrado", 404)
-        return job.snapshot()
+        snapshot = job.snapshot()
+        if job.status != "running":
+            snapshot["rows"] = self.screener.refresh(snapshot["rows"])
+        return snapshot
 
     def screen_latest(self, params: dict[str, list[str]]) -> dict[str, Any]:
         universe = (params.get("universe", ["ndx"])[0] or "ndx").lower()
@@ -263,6 +266,10 @@ class Api:
             universe = (params.get("universe", ["ndx"])[0] or "ndx").lower()
             latest = self.screener.latest(universe)
             rows = latest.get("rows", []) if latest else []
+
+        requested = {symbol.upper() for symbol in _list(params, "symbols")}
+        if requested:
+            rows = [row for row in rows if (row.get("symbol") or "").upper() in requested]
 
         if not rows:
             raise ApiError("no hay resultados para exportar", 404)
@@ -544,6 +551,15 @@ class Api:
             threshold = _float(params, "threshold", 0.0)
             if not math.isfinite(threshold) or threshold <= 0:
                 raise ApiError("el umbral debe ser positivo")
+            upper = 100.0 if kind in (
+                "score_above",
+                "score_below",
+                "rsi_above",
+                "rsi_below",
+                "high_52w",
+            ) else None
+            if upper is not None and threshold > upper:
+                raise ApiError(f"el umbral debe estar entre 0 y {upper:.0f}")
         alert_id = store.add_alert(symbol, kind, threshold, label)
         return {"ok": True, "id": alert_id}
 
@@ -605,8 +621,68 @@ class Api:
                 created.append({"kind": kind, "threshold": value})
         return {"ok": True, "id": position_id, "alerts_created": created}
 
+    def portfolio_update(self, params: dict[str, list[str]]) -> dict[str, Any]:
+        position_id = int(_float(params, "id", 0))
+        if not store.get_position(position_id):
+            raise ApiError("posición no encontrada", 404)
+        symbol = (params.get("symbol", [""])[0] or "").strip().upper()
+        if not SYMBOL_RE.match(symbol):
+            raise ApiError("símbolo no válido")
+        shares = _float(params, "shares", 0.0)
+        price = _float(params, "price", 0.0)
+        if (
+            not math.isfinite(shares)
+            or not math.isfinite(price)
+            or shares <= 0
+            or price <= 0
+        ):
+            raise ApiError("acciones y precio deben ser positivos")
+        stop = _float(params, "stop", 0.0) or None
+        target = _float(params, "target", 0.0) or None
+        if stop is not None and (not math.isfinite(stop) or stop <= 0):
+            raise ApiError("el stop debe ser positivo")
+        if target is not None and (not math.isfinite(target) or target <= 0):
+            raise ApiError("el objetivo debe ser positivo")
+        entry_date = (params.get("date", [""])[0] or "").strip() or None
+        note = (params.get("note", [""])[0] or "").strip()
+        previous = store.get_position(position_id) or {}
+        store.update_position(
+            position_id, symbol, shares, price, entry_date, stop, target, note
+        )
+        others = [p for p in store.list_positions() if p["id"] != position_id]
+        for kind, field, new_value in (
+            ("price_below", "stop", stop),
+            ("price_above", "target", target),
+        ):
+            old_value = previous.get(field)
+            if old_value and old_value != new_value:
+                still_used = any(
+                    p.get("symbol") == previous.get("symbol")
+                    and p.get(field) == old_value
+                    for p in others
+                )
+                if not still_used:
+                    store.delete_alert_matching(previous["symbol"], kind, old_value)
+            if new_value and not store.has_alert(symbol, kind, new_value):
+                store.add_alert(symbol, kind, new_value, None)
+        return {"ok": True, "id": position_id}
+
     def portfolio_delete(self, params: dict[str, list[str]]) -> dict[str, Any]:
         position_id = int(_float(params, "id", 0))
+        position = store.get_position(position_id)
+        if position:
+            others = [p for p in store.list_positions() if p["id"] != position_id]
+            for kind, field in (("price_below", "stop"), ("price_above", "target")):
+                value = position.get(field)
+                if not value:
+                    continue
+                still_used = any(
+                    p.get("symbol") == position["symbol"]
+                    and p.get(field) == value
+                    for p in others
+                )
+                if not still_used:
+                    store.delete_alert_matching(position["symbol"], kind, value)
         store.delete_position(position_id)
         return {"ok": True}
 

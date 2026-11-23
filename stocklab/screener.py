@@ -421,6 +421,8 @@ class ScreenJob:
             "max_drawdown": metrics["max_drawdown"],
             "from_high": metrics["from_high"],
             "range_pos": metrics["range_pos"],
+            "high_52w": metrics["high_52w"],
+            "volume_ratio": metrics["volume_ratio"],
             "dollar_volume": metrics["dollar_volume_20d"],
             "above_sma200": metrics["above_sma200"],
             "as_of": metrics["as_of"],
