@@ -23,6 +23,8 @@ calidad fundamental? ¿Se mantiene fuera de muestra?
 - **Calidad SEC:** se usa el trimestre presentado antes de cada fecha (`filed`), no el
   último disponible a día de hoy.
 - **Benchmark:** QQQ desde la misma fuente de precios.
+- **Histórico de detalle:** hasta ~10 años cuando la fuente lo permite; el screener
+  mantiene 3 años para no multiplicar la caché operativa.
 
 ## Resultados
 

@@ -88,6 +88,7 @@ Internet. No hay telemetría. Antes de compartirla, revisa
 **Análisis individual**
 - Buscador con autocompletado sobre el catálogo local.
 - Gráfico de velas con SMA20/50/200, volumen y RSI (canvas propio, sin librerías).
+  La ficha descarga hasta ~10 años (máximo disponible en la fuente) para el rango Máx.
 - Señal destacada (COMPRA FUERTE … VENTA FUERTE) con confianza, precio objetivo a
   3 meses, stop sugerido, R:R, soporte y resistencia.
 - **Resultados y calidad**: cuentas trimestrales, márgenes, FCF, EPS vs consenso,
@@ -383,7 +384,7 @@ tests/                    pruebas con unittest
 | `GET /api/status` | Estado, tamaño de caché y pesos |
 | `GET /api/universes` | Universos disponibles |
 | `GET /api/search?q=` | Buscador de tickers |
-| `GET /api/analyze?symbol=AAPL` | Análisis completo + serie para el gráfico |
+| `GET /api/analyze?symbol=AAPL&full=1` | Análisis completo + histórico largo para el gráfico |
 | `GET /api/fundamentals?symbol=AAPL` | Resultados, analistas y score de calidad |
 | `GET /api/fundamentals/enrich?id=&limit=` | Enriquece el top de un screener con fundamentales |
 | `GET /api/news?symbol=` | Titulares, eventos y sentimiento |

@@ -127,8 +127,9 @@ class Api:
         if not SYMBOL_RE.match(raw):
             raise ApiError("símbolo no válido")
         force = _bool(params, "force")
+        full = _bool(params, "full")
         try:
-            bars = self.data.get_bars(raw, force=force)
+            bars = self.data.get_bars(raw, force=force, full=full)
         except net.FetchError as exc:
             raise ApiError(str(exc), 404) from exc
 

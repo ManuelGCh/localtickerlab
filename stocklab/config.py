@@ -13,6 +13,8 @@ PORT = 8765
 
 # Ventana de histórico que se descarga y se guarda (días naturales).
 HISTORY_DAYS = 3 * 365
+# La ficha intenta traer el máximo disponible para el gráfico "Máx".
+DETAIL_HISTORY_DAYS = 20 * 365
 
 # Nº de descargas simultáneas contra las fuentes públicas.
 MAX_WORKERS = 16
@@ -24,7 +26,7 @@ REQUEST_RETRIES = 3
 REFRESH_AFTER_HOUR_NY = 18
 
 # Series que se envían al frontend para dibujar los gráficos.
-CHART_POINTS = 520
+CHART_POINTS = 3000
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "

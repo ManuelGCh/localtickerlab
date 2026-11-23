@@ -8,7 +8,8 @@ Primera versión publicable como laboratorio local de análisis y validación.
 
 - Screener NASDAQ-100 y Composite con puntuación técnica, señal, objetivo, stop, R:R,
   RSI, fuerza relativa y calidad contextual.
-- Análisis individual con velas, medias, volumen, RSI, métricas y resumen.
+- Análisis individual con velas, medias, volumen, RSI, métricas y resumen; rango
+  **Máx** con hasta ~10 años (límite de la fuente).
 - Fundamentales de Nasdaq.com y calidad point-in-time desde SEC EDGAR.
 - Noticias por ticker desde Google News RSS.
 - Backtest walk-forward con split in-sample/out-of-sample, costes, deciles y calibración.

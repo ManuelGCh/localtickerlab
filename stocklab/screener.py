@@ -26,6 +26,7 @@ class DataService:
         self._locks: dict[str, threading.Lock] = {}
         self._guard = threading.Lock()
         self._failed_until: dict[str, float] = {}
+        self._full_history: set[str] = set()
 
     def clear_failed(self) -> None:
         self._failed_until.clear()
@@ -38,10 +39,32 @@ class DataService:
                 self._locks[symbol] = lock
             return lock
 
-    def get_bars(self, symbol: str, force: bool = False) -> list[dict[str, Any]]:
+    def get_bars(
+        self, symbol: str, force: bool = False, full: bool = False
+    ) -> list[dict[str, Any]]:
         symbol = symbol.strip().upper()
         with self._lock_for(symbol):
             cached = [] if force else store.get_bars(symbol)
+            if full and symbol not in self._full_history:
+                try:
+                    payload = nasdaq.fetch_history(
+                        symbol, days=config.DETAIL_HISTORY_DAYS, min_bars=1
+                    )
+                    if payload.get("bars"):
+                        store.upsert_bars(symbol, payload["bars"])
+                        store.mark_synced(symbol, "nasdaq", len(store.get_bars(symbol)))
+                        self._full_history.add(symbol)
+                        return store.get_bars(symbol)
+                except (net.FetchError, net.NoDataError, KeyError, ValueError, TypeError):
+                    try:
+                        payload = yahoo.fetch_history(symbol, rng="10y")
+                        if payload.get("bars"):
+                            store.upsert_bars(symbol, payload["bars"])
+                            store.mark_synced(symbol, "yahoo", len(store.get_bars(symbol)))
+                            self._full_history.add(symbol)
+                            return store.get_bars(symbol)
+                    except (net.FetchError, net.NoDataError, KeyError, ValueError, TypeError):
+                        pass
             if not force and not store.needs_refresh(symbol):
                 if len(cached) >= 30:
                     return cached

@@ -307,12 +307,20 @@
       ctx.font = "10px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
+      const firstMs = Date.parse(d.dates[view.start] || "");
+      const lastMs = Date.parse(d.dates[view.end - 1] || "");
+      const spanDays = firstMs && lastMs ? (lastMs - firstMs) / 86400000 : 0;
+      const axisDate = (date) => {
+        if (spanDays > 730) return date.slice(0, 4);
+        if (spanDays > 180) return `${date.slice(5, 7)}/${date.slice(2, 4)}`;
+        return shortDate(date);
+      };
       for (let k = 0; k < labels; k++) {
         const idx = Math.round(view.start + ((view.end - 1 - view.start) * k) / (labels - 1));
         const date = d.dates[idx];
         if (!date) continue;
         const x = clamp(xAt(idx), 24, padL + innerW - 24);
-        ctx.fillText(shortDate(date), x, this.height - padB + 6);
+        ctx.fillText(axisDate(date), x, this.height - padB + 6);
       }
 
       /* Crosshair */
@@ -493,11 +501,20 @@
       ctx.fillStyle = "rgba(148, 163, 184, 0.62)";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
+      const firstMs = Date.parse(dates[view.start] || "");
+      const lastMs = Date.parse(dates[view.end - 1] || "");
+      const spanDays = firstMs && lastMs ? (lastMs - firstMs) / 86400000 : 0;
+      const labelFor = (date) => {
+        if (!date) return "";
+        if (spanDays > 730) return date.slice(0, 4);
+        if (spanDays > 180) return `${date.slice(5, 7)}/${date.slice(2, 4)}`;
+        return `${date.slice(8, 10)}/${date.slice(5, 7)}`;
+      };
       for (let k = 0; k < labels; k++) {
-        const idx = Math.round(((dates.length - 1) * k) / (labels - 1 || 1));
+        const idx = Math.round(view.start + ((view.n - 1) * k) / (labels - 1 || 1));
         const date = dates[idx];
         if (!date) continue;
-        ctx.fillText(date.slice(2, 7), xAt(idx), padT + h + 7);
+        ctx.fillText(labelFor(date), xAt(idx), padT + h + 7);
       }
     }
   }

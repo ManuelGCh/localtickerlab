@@ -122,7 +122,8 @@ La base principal es `data/market.db`. La caché del backtest es independiente
 ## Frescura
 
 - **Precios:** último cierre disponible. Se refrescan tras el cierre (18:00 ET) y se
-  detectan series atrasadas para reintentar.
+  detectan series atrasadas para reintentar. El screener usa 3 años; la ficha solicita
+  hasta ~10 años (el máximo que devuelve la fuente) para que **Máx** sea completo.
 - **Fundamentales:** caché de 12 h; el escaneo diario refresca el top y completa el
   NASDAQ-100.
 - **Noticias:** 30 min.

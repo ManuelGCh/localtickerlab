@@ -1865,7 +1865,7 @@
     $("#analyzeLoading").classList.remove("hidden");
     $("#reloadSymbol").disabled = true;
     try {
-      const data = await api("/api/analyze", { symbol, force: force ? 1 : 0 });
+      const data = await api("/api/analyze", { symbol, force: force ? 1 : 0, full: 1 });
       state.current = data;
       store.set("sl.lastSymbol", symbol);
       updateHash();
