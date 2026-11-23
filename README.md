@@ -10,11 +10,19 @@ indicadores técnicos, puntúa cada valor de 0 a 100 y permite comparar todo el 
 o estudiar un ticker concreto.
 </p>
 
+<p align="center">
+  <a href="https://github.com/ManuelGCh/stocklab-nasdaq/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ManuelGCh/stocklab-nasdaq/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue">
+  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
+</p>
+
 Sin dependencias externas: solo **Python 3.10+** (probado en 3.14) y la biblioteca estándar.
 Los datos se guardan en una base SQLite local, así que las siguientes ejecuciones son
 instantáneas.
 
-```
+```bash
+git clone https://github.com/ManuelGCh/stocklab-nasdaq.git
+cd stocklab-nasdaq
 python3 run.py
 ```
 
